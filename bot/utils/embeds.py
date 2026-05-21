@@ -33,6 +33,15 @@ ITEM_LABELS: dict[str, str] = {
     "soul": "Soul",
     "corruption_stack": "Corruption Stack",
     "kindred_passive": "Kindred's Passive",
+    "red_buff": "Red Buff",
+    "blue_buff": "Blue Buff",
+    "dragon_soul_cloud": "Cloud Dragon Soul",
+    "dragon_soul_ocean": "Ocean Dragon Soul",
+    "dragon_soul_mountain": "Mountain Dragon Soul",
+    "dragon_soul_infernal": "Infernal Dragon Soul",
+    "dragon_soul_chemtech": "Chemtech Dragon Soul",
+    "dragon_soul_hextech": "Hextech Dragon Soul",
+    "dragon_soul_elder": "Elder Dragon Soul",
     **{f"fragment_t{t}": f"{TIER_NAME[t]} Fragment" for t in range(1, 7)},
 }
 
@@ -196,6 +205,100 @@ def trade_embed(trade: Trade, offered: Champion, requested: Champion) -> discord
         f"Expires: <t:{int(trade.expires_at.timestamp())}:R>"
     )
     return discord.Embed(title="Trade", description=desc, color=0x9C27B0)
+
+
+# --- PVE embeds --------------------------------------------------------------
+
+
+def encounter_embed(camp, champ, win_pct: float) -> discord.Embed:
+    """Pre-engage card with the camp + your best champ + win% preview."""
+    tier_color = TIER_COLOR.get(camp.tier, 0x607D8B)
+    flavor = camp.flavor or f"You stumble upon **{camp.name}**."
+    weakness_text = f" · weak to {camp.weak_to}" if camp.weak_to else ""
+    lines = [
+        f"🌲 {flavor}",
+        "",
+        f"**{camp.name}** — Tier {camp.tier}{weakness_text}",
+    ]
+    if champ is None:
+        lines.append("\nYou have no alive champion — backing out is your only option.")
+    else:
+        # estimate respawn duration so the player sees the loss cost up front
+        diff = max(-4, min(4, champ.tier - camp.tier))
+        from bot.game.pve.combat import (
+            DEFAULT_RESPAWN_SEC,
+            FAIL_GOLD_PCT,
+            RESPAWN_DURATION_SEC,
+        )
+        respawn = RESPAWN_DURATION_SEC.get(diff, DEFAULT_RESPAWN_SEC)
+        gold_loss = int(camp.base_gold * FAIL_GOLD_PCT)
+        lines += [
+            f"Your best alive champion: **{champ.name}** (T{champ.tier}, {champ.damage_type})",
+            f"Estimated win chance: **{win_pct:.1f}%**",
+            f"On failure: lose ~{gold_loss}g, {champ.name} dies for **{respawn // 60} min**.",
+            "",
+            "Choose carefully — backing out *also* triggers the hunt cooldown.",
+        ]
+    return discord.Embed(
+        title="A wild encounter!",
+        description="\n".join(lines),
+        color=tier_color,
+    )
+
+
+def world_boss_embed(boss, spec, top_strikers, you_dealt) -> discord.Embed:
+    """Status embed for an active world boss."""
+    name = spec.name if spec else boss.boss_key
+    hp_pct = int(round(100 * boss.hp_remaining / max(1, boss.hp_total)))
+    lines = [
+        f"**HP:** {boss.hp_remaining:,} / {boss.hp_total:,} ({hp_pct}%)",
+        f"**Expires:** <t:{int(boss.expires_at.timestamp())}:R>",
+    ]
+    if top_strikers:
+        lines.append("")
+        lines.append("**Top strikers:**")
+        for i, (uid, dmg) in enumerate(top_strikers):
+            lines.append(f"  {i + 1}. <@{uid}> — {dmg:,}")
+    lines.append("")
+    if you_dealt > 0:
+        lines.append(f"_You've dealt {you_dealt:,} damage._")
+    else:
+        lines.append("_You haven't struck this boss yet — use `/strike`._")
+    return discord.Embed(
+        title=f"🐉 {name}",
+        description="\n".join(lines),
+        color=0xFFD700 if hp_pct > 50 else (0xFF9800 if hp_pct > 20 else 0xF44336),
+    )
+
+
+def camp_result_embed(camp, champ, outcome) -> discord.Embed:
+    """Post-engage result card."""
+    fight = outcome.fight
+    if fight.won:
+        color = TIER_COLOR.get(camp.tier, 0x4CAF50)
+        title = f"✅ Slain — {camp.name}"
+        lines = [
+            f"**{champ.name}** put down {camp.name}.",
+            f"Gold: **+{outcome.gold_awarded:,}** · XP: **+{outcome.xp_awarded}**",
+        ]
+        if fight.drops:
+            drop_text = ", ".join(
+                f"{ITEM_LABELS.get(t, t)} ×{q}" for t, q in fight.drops
+            )
+            lines.append(f"Drops: **{drop_text}**")
+        if outcome.leveled_up_to:
+            lines.append(f":sparkles: **Level Up! → {outcome.leveled_up_to}** :sparkles:")
+        lines.append(f"_Hunt cooldown: {outcome.cooldown_seconds_set}s_")
+    else:
+        color = 0xF44336
+        title = f"💀 Defeated by {camp.name}"
+        lines = [
+            f"**{champ.name}** fell to {camp.name}.",
+            f"Gold lost: **{outcome.gold_awarded:,}**",
+            f"**{champ.name}** is dead for **{fight.respawn_seconds // 60} min**.",
+            f"_Hunt cooldown: {outcome.cooldown_seconds_set}s_",
+        ]
+    return discord.Embed(title=title, description="\n".join(lines), color=color)
 
 
 # --- internals ---------------------------------------------------------------

@@ -206,7 +206,7 @@ async def run_action(
             )
         )
 
-    loadout = await queries.get_loadout(user.discord_id)
+    loadout = await queries.alive_loadout(user.discord_id)
     chosen_champ = _check_loadout_requirement(spec, loadout)
     needs_champ = (
         spec.required_champion is not None
@@ -232,6 +232,13 @@ async def run_action(
     drops = _roll_drops(spec, rng)
     xp_result = apply_xp(user.xp, user.level, xp_awarded)
 
+    # blue_buff: consume to skip the cooldown of this action (if any).
+    blue_buff_consumed = False
+    if not bypass_cooldown:
+        if await queries.get_item_qty(user.discord_id, "blue_buff") > 0:
+            if await queries.consume_item(user.discord_id, "blue_buff", 1):
+                blue_buff_consumed = True
+
     pool = get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -242,7 +249,7 @@ async def run_action(
             )
             for item_type, qty in drops:
                 await queries.add_item(user.discord_id, item_type, qty, conn=conn)
-            if not bypass_cooldown:
+            if not bypass_cooldown and not blue_buff_consumed:
                 await queries.set_cooldown(
                     user.discord_id, spec.key, spec.cooldown, conn=conn
                 )

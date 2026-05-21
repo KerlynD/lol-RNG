@@ -61,28 +61,28 @@ T2: tuple[ActionSpec, ...] = (
     ActionSpec(
         key="forage", name="/forage", tier=2, cooldown=_cd(hours=1, minutes=30),
         required_factions=("Yordle",),
-        base_gold=80, base_xp=12,
+        base_gold=56, base_xp=12,                       # -30% rebalance vs PVE (v2)
         drop_table=(("mat", 0.5), ("shield_physical", 0.05)),
         description="Bandle City foraging.",
     ),
     ActionSpec(
         key="tinker", name="/tinker", tier=2, cooldown=_cd(hours=2),
         required_region="Piltover",  # OR Zaun OR Yordle inventor; runner accepts either-of via factions
-        base_gold=70, base_xp=15,
+        base_gold=49, base_xp=15,                       # -30%
         drop_table=(("mat", 0.7),),
         description="Build tools that buff other actions.",
     ),
     ActionSpec(
         key="prank", name="/prank", tier=2, cooldown=_cd(hours=1),
         min_champ_tier=2,
-        base_gold=30, base_xp=10,
+        base_gold=21, base_xp=10,                       # -30%
         triggers_pvp=True,
         description="Steal a small share of another player's gold.",
     ),
     ActionSpec(
         key="duel", name="/duel", tier=2, cooldown=_cd(hours=1),
         min_champ_tier=2,
-        base_gold=40, base_xp=12,
+        base_gold=28, base_xp=12,                       # -30%
         triggers_pvp=True,
         description="Single-round PvP against another player.",
     ),
@@ -95,14 +95,14 @@ T3: tuple[ActionSpec, ...] = (
     ActionSpec(
         key="patrol-demacia", name="/patrol-demacia", tier=3, cooldown=_cd(hours=4),
         required_region="Demacia",
-        base_gold=180, base_xp=35,
+        base_gold=126, base_xp=35,                      # -30%
         drop_table=(("shield_physical", 0.25),),
         description="Demacian patrol. Steady gold, blocks AP.",
     ),
     ActionSpec(
         key="heist-piltover", name="/heist-piltover", tier=3, cooldown=_cd(hours=5),
         required_region="Piltover",
-        base_gold=250, base_xp=40,
+        base_gold=175, base_xp=40,                      # -30%
         drop_table=(("mat", 0.4),),
         triggers_pvp=True,
         description="High-variance Piltover heist.",
@@ -110,21 +110,21 @@ T3: tuple[ActionSpec, ...] = (
     ActionSpec(
         key="meditate-ionia", name="/meditate-ionia", tier=3, cooldown=_cd(hours=4),
         required_region="Ionia",
-        base_gold=160, base_xp=50,
+        base_gold=112, base_xp=50,                      # -30%
         drop_table=(("shield_magic", 0.25),),
         description="Ionian meditation. Passive XP buff.",
     ),
     ActionSpec(
         key="hunt-shadowisles", name="/hunt-shadowisles", tier=3, cooldown=_cd(hours=6),
         required_region="Shadow Isles",
-        base_gold=200, base_xp=45,
+        base_gold=140, base_xp=45,                      # -30%
         drop_table=(("soul", 0.5),),
         description="Hunt in the Shadow Isles.",
     ),
     ActionSpec(
         key="raid-noxus", name="/raid-noxus", tier=3, cooldown=_cd(hours=5),
         required_region="Noxus",
-        base_gold=220, base_xp=45,
+        base_gold=154, base_xp=45,                      # -30%
         triggers_pvp=True,
         description="Noxian raid — pure PvP for gold.",
     ),
@@ -137,28 +137,28 @@ T4: tuple[ActionSpec, ...] = (
     ActionSpec(
         key="ascend", name="/ascend", tier=4, cooldown=_cd(hours=12),
         required_factions=("Ascended",),
-        base_gold=400, base_xp=80,
+        base_gold=280, base_xp=80,                      # -30%
         drop_table=(("fragment_t3", 0.3),),
         description="Shuriman ascension. Convert mats to fragments.",
     ),
     ActionSpec(
         key="darkin-pact", name="/darkin-pact", tier=4, cooldown=_cd(hours=12),
         required_factions=("Darkin",),
-        base_gold=600, base_xp=100,
+        base_gold=420, base_xp=100,                     # -30%
         drop_table=(("corruption_stack", 1.0),),
         description="Sacrifice for gold and corruption.",
     ),
     ActionSpec(
         key="defend-targon", name="/defend-targon", tier=4, cooldown=_cd(hours=12),
         required_region="Targon",
-        base_gold=450, base_xp=90,
+        base_gold=315, base_xp=90,                      # -30%
         drop_table=(("aegis", 0.05),),
         description="Targonian defense.",
     ),
     ActionSpec(
         key="void-touch", name="/void-touch", tier=4, cooldown=_cd(hours=12),
         required_factions=("Voidborn",),
-        base_gold=500, base_xp=95,
+        base_gold=350, base_xp=95,                      # -30%
         drop_table=(("soul", 0.3),),
         description="Voidborn touch. Drain target gold.",
     ),
@@ -172,14 +172,14 @@ T5: tuple[ActionSpec, ...] = (
         key="void-incursion", name="/void-incursion", tier=5, cooldown=_cd(hours=24),
         required_factions=("Voidborn",),
         min_champ_tier=5,
-        base_gold=1200, base_xp=200,
+        base_gold=840, base_xp=200,                     # -30%
         drop_table=(("fragment_t4", 0.4), ("soul", 0.5)),
         description="Voidborn incursion. Heavy payout.",
     ),
     ActionSpec(
         key="celestial-gaze", name="/celestial-gaze", tier=5, cooldown=_cd(hours=24),
         required_factions=("Celestial", "Aspect"),
-        base_gold=900, base_xp=180,
+        base_gold=630, base_xp=180,                     # -30%
         drop_table=(("shield_magic", 0.4), ("aegis", 0.1)),
         description="Peek at the next roll's tier.",
     ),
@@ -187,7 +187,7 @@ T5: tuple[ActionSpec, ...] = (
         key="freljord-storm", name="/freljord-storm", tier=5, cooldown=_cd(hours=24),
         required_region="Freljord",
         min_champ_tier=5,
-        base_gold=1000, base_xp=200,
+        base_gold=700, base_xp=200,                     # -30%
         drop_table=(("mat", 1.0), ("shield_physical", 0.3)),
         description="Freljord storm. Area buff to your next actions.",
     ),
@@ -195,7 +195,7 @@ T5: tuple[ActionSpec, ...] = (
         key="judgment", name="/judgment", tier=5, cooldown=_cd(hours=24),
         required_factions=("Aspect",),
         min_champ_tier=5,
-        base_gold=800, base_xp=180,
+        base_gold=560, base_xp=180,                     # -30%
         drop_table=(("stasis", 0.2),),
         description="Mark a player — their next PvP attempt on you fails.",
     ),

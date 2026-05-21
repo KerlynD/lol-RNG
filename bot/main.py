@@ -8,6 +8,8 @@ from discord.ext import commands
 
 from bot.config import Settings
 from bot.db import migrate, pool
+from bot.tasks import ambient_events as ambient_events_task
+from bot.tasks import world_boss_scheduler as world_boss_task
 from bot.tasks.reap_expiry import sweep_expired_reap_marks
 from bot.tasks.trade_expiry import sweep_expired_trades
 
@@ -20,7 +22,11 @@ COGS = (
     "bot.cogs.inventory",
     "bot.cogs.loadout",
     "bot.cogs.actions",
+    "bot.cogs.pve",
     "bot.cogs.pvp",
+    "bot.cogs.ambient",
+    "bot.cogs.settings",
+    "bot.cogs.worldboss",
     "bot.cogs.trading",
     "bot.cogs.godlike",
     "bot.cogs.prestige",
@@ -52,14 +58,22 @@ class LolRngBot(commands.Bot):
 
         sweep_expired_trades.start()
         sweep_expired_reap_marks.start()
-        log.info("Background sweeps started.")
+        world_boss_task.attach_bot(self)
+        ambient_events_task.attach_bot(self)
+        world_boss_task.sweep_and_maybe_spawn.start()
+        ambient_events_task.spawn_ambient_events.start()
+        log.info("Background sweeps + schedulers started.")
 
     async def close(self) -> None:
         try:
-            if sweep_expired_trades.is_running():
-                sweep_expired_trades.cancel()
-            if sweep_expired_reap_marks.is_running():
-                sweep_expired_reap_marks.cancel()
+            for loop_task in (
+                sweep_expired_trades,
+                sweep_expired_reap_marks,
+                world_boss_task.sweep_and_maybe_spawn,
+                ambient_events_task.spawn_ambient_events,
+            ):
+                if loop_task.is_running():
+                    loop_task.cancel()
             await pool.close_pool()
         finally:
             await super().close()

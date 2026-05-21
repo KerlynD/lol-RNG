@@ -85,8 +85,8 @@ async def attempt_pvp(
             error="One of the players is missing a profile.",
         )
 
-    a_load = await queries.get_loadout(attacker_id)
-    d_load = await queries.get_loadout(defender_id)
+    a_load = await queries.alive_loadout(attacker_id)
+    d_load = await queries.alive_loadout(defender_id)
     if not a_load:
         return PvpOutcome(
             skirmish=None,  # type: ignore[arg-type]
@@ -94,7 +94,7 @@ async def attempt_pvp(
             capped=False,
             immune=False,
             auto_tied=False,
-            error="You need at least one champion equipped to attack.",
+            error="You have no alive champions equipped — check /menu for revive timers.",
         )
     if not d_load:
         return PvpOutcome(
@@ -103,7 +103,7 @@ async def attempt_pvp(
             capped=False,
             immune=False,
             auto_tied=False,
-            error="Target has no equipped champions.",
+            error="Target has no alive champions equipped.",
         )
 
     inv = await queries.get_inventory(defender_id)
@@ -113,12 +113,20 @@ async def attempt_pvp(
     }
     auto_tied = inv.get("kindred_passive", 0) > 0
 
+    # red_buff: consume now (atomic) and apply +20% attacker Power.
+    attacker_inv = await queries.get_inventory(attacker_id)
+    red_buff_active = False
+    if attacker_inv.get("red_buff", 0) > 0:
+        consumed = await queries.consume_item(attacker_id, "red_buff", 1)
+        red_buff_active = bool(consumed)
+
     skirmish = simulate_skirmish(
         a_load, d_load,
         attacker_level=attacker.level,
         defender_level=defender.level,
         attacker_prestige=attacker.prestige,
         defender_prestige=defender.prestige,
+        attacker_power_multiplier=(1.2 if red_buff_active else 1.0),
         defender_shields=shields,
     )
 

@@ -72,13 +72,15 @@ class Menu(commands.Cog):
 
         user_id = interaction.user.id
         user = await queries.get_user(user_id)
-        loadout = await queries.get_loadout(user_id)
+        loadout = await queries.alive_loadout(user_id)
+        full_loadout = await queries.get_loadout(user_id)
+        dead_champs = await queries.dead_champions_for_user(user_id)
         cooldowns = await queries.get_all_cooldowns(user_id)
         inventory = await queries.get_inventory(user_id)
         unlocks = unlocks_for(user.level)
         roll_tokens = inventory.get("roll_token", 0)
 
-        # Bucket every action by eligibility status.
+        # Bucket every action by eligibility status — only over ALIVE loadout.
         buckets: dict[str, list] = {
             ELIGIBLE: [],
             COOLDOWN: [],
@@ -90,9 +92,14 @@ class Menu(commands.Cog):
             buckets[av.status].append(av)
 
         # ── Header ─────────────────────────────────────────────────────────
+        alive_count = len(loadout)
+        equipped_count = len(full_loadout)
+        loadout_label = f"{alive_count}/{equipped_count}" if equipped_count else "empty"
+        if equipped_count and alive_count < equipped_count:
+            loadout_label += " alive"
         header_lines = [
             f"**Level** {user.level} · **{user.gold:,} Gold** · **{roll_tokens} Roll Token(s)**",
-            f"**Loadout** {len(loadout)}/{unlocks.loadout_slots} · "
+            f"**Loadout** {loadout_label}/{unlocks.loadout_slots} · "
             f"**Action tiers unlocked** T1–T{unlocks.max_action_tier}",
         ]
         if user.prestige > 0:
@@ -103,6 +110,42 @@ class Menu(commands.Cog):
             description="\n".join(header_lines),
             color=0x3F51B5,
         )
+
+        # ── PVE Hunt ────────────────────────────────────────────────────────
+        hunt_cd = cooldowns.get("hunt-camp")
+        hunt_lines: list[str] = []
+        if hunt_cd is None:
+            if loadout:
+                hunt_lines.append("✅ **`/hunt-camp` ready** — wander into the jungle.")
+            else:
+                hunt_lines.append("✅ `/hunt-camp` ready — but you have no alive champion.")
+        else:
+            hunt_lines.append(f"⏳ Next hunt in **{_format_seconds(hunt_cd)}**.")
+        # Active buffs / souls
+        if inventory.get("red_buff", 0) > 0:
+            hunt_lines.append(f"🔴 Red Buff ×{inventory['red_buff']} — next fight +10% win.")
+        if inventory.get("blue_buff", 0) > 0:
+            hunt_lines.append(f"🔵 Blue Buff ×{inventory['blue_buff']} — next action skips cooldown.")
+        owned_souls = [
+            k.replace("dragon_soul_", "").title()
+            for k in inventory
+            if k.startswith("dragon_soul_") and inventory[k] > 0
+        ]
+        if owned_souls:
+            hunt_lines.append("🐉 Dragon Souls: " + ", ".join(sorted(owned_souls)))
+        embed.add_field(name="🌲 PVE", value="\n".join(hunt_lines), inline=False)
+
+        # ── Dead champions ──────────────────────────────────────────────────
+        if dead_champs:
+            dead_lines = [
+                f"💀 **{name}** — revives in {_format_seconds(remaining)}"
+                for _, name, remaining in dead_champs
+            ]
+            embed.add_field(
+                name=f"💀 Dead ({len(dead_champs)})",
+                value="\n".join(dead_lines)[:1024],
+                inline=False,
+            )
 
         # ── Available actions ──────────────────────────────────────────────
         if buckets[ELIGIBLE]:
@@ -221,6 +264,84 @@ class Menu(commands.Cog):
         else:
             pvp_lines.append("_You need at least one equipped champion to attack._")
         embed.add_field(name="⚔ PvP status", value="\n".join(pvp_lines), inline=False)
+
+        # ── World boss (if active) ─────────────────────────────────────────
+        boss = await queries.get_active_world_boss()
+        if boss is not None:
+            from bot.game.pve.world_bosses import WORLD_BOSSES
+            spec = WORLD_BOSSES.get(boss.boss_key)
+            name = spec.name if spec else boss.boss_key
+            hp_pct = int(round(100 * boss.hp_remaining / max(1, boss.hp_total)))
+            secs_left = int((boss.expires_at - boss.spawned_at).total_seconds())
+            top = await queries.list_top_strikers(boss.id, limit=1)
+            you_dealt = 0
+            if top:
+                top_uid, top_dmg = top[0]
+                top_line = f"Top: <@{top_uid}> ({top_dmg:,} dmg)"
+            else:
+                top_line = "_no strikers yet_"
+            # Quick lookup: did the user strike?
+            user_top = await queries.list_top_strikers(boss.id, limit=20)
+            for uid, dmg in user_top:
+                if uid == user_id:
+                    you_dealt = dmg
+                    break
+            embed.add_field(
+                name=f"🐉 World Boss — {name}",
+                value=(
+                    f"HP: **{boss.hp_remaining:,} / {boss.hp_total:,}** ({hp_pct}%)\n"
+                    f"Expires: <t:{int(boss.expires_at.timestamp())}:R>\n"
+                    f"{top_line}\n"
+                    + (f"_You've dealt {you_dealt:,} damage._" if you_dealt else "_Use `/strike` to engage._")
+                ),
+                inline=False,
+            )
+
+        # ── Regional exploration ───────────────────────────────────────────
+        from bot.game.pve.encounters import regions_list
+        owned_regions = {e.champion.region for e in loadout if e.champion.region}
+        available_explore: list[str] = []
+        explore_locked_by_champ: list[str] = []
+        explore_on_cd: list[tuple[str, float]] = []
+        for region in regions_list():
+            cd_key = f"explore:{region.lower()}"
+            cd_remaining = cooldowns.get(cd_key)
+            if region not in owned_regions:
+                explore_locked_by_champ.append(region)
+            elif cd_remaining is not None:
+                explore_on_cd.append((region, cd_remaining))
+            else:
+                available_explore.append(region)
+
+        explore_lines: list[str] = []
+        if available_explore:
+            explore_lines.append(
+                "✅ Up: " + ", ".join(sorted(available_explore))
+            )
+        if explore_on_cd:
+            explore_on_cd.sort(key=lambda x: x[1])
+            cd_line = ", ".join(
+                f"{r} ({_format_seconds(s)})" for r, s in explore_on_cd[:4]
+            )
+            explore_lines.append("⏳ " + cd_line)
+        if not available_explore and not explore_on_cd and explore_locked_by_champ:
+            explore_lines.append(
+                "_Equip a champion from a region to /explore there._"
+            )
+        if explore_lines:
+            embed.add_field(
+                name="🗺 Runeterra",
+                value="\n".join(explore_lines),
+                inline=False,
+            )
+
+        # ── Ambient encounter status ───────────────────────────────────────
+        ambient_line = (
+            "ON — ambient encounters may surprise you every ~20–40 min."
+            if user.ambient_events_opt_in
+            else "OFF — turn on with `/ambient-toggle opt_in:True`."
+        )
+        embed.add_field(name="⚙ Ambient encounters", value=ambient_line, inline=False)
 
         # ── Active effects (only if any) ───────────────────────────────────
         active = []
