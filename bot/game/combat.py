@@ -177,11 +177,14 @@ def simulate_round(
     attacker_prestige: int,
     defender_prestige: int,
     defender_shields: dict[str, int],
+    attacker_power_multiplier: float = 1.0,
     rng: random.Random | None = None,
 ) -> RoundResult:
     rng = rng or random
-    atk_power = power_score(attacker_champ, attacker_level, attacker_prestige) * _tier_diff_modifier(
-        attacker_champ.tier, defender_champ.tier
+    atk_power = (
+        power_score(attacker_champ, attacker_level, attacker_prestige)
+        * _tier_diff_modifier(attacker_champ.tier, defender_champ.tier)
+        * attacker_power_multiplier
     )
     def_power = power_score(defender_champ, defender_level, defender_prestige)
     win_pct = _win_pct(atk_power, def_power)
@@ -246,10 +249,15 @@ def simulate_skirmish(
     defender_level: int = 1,
     attacker_prestige: int = 0,
     defender_prestige: int = 0,
+    attacker_power_multiplier: float = 1.0,
     defender_shields: dict[str, int] | None = None,
     rng: random.Random | None = None,
 ) -> SkirmishResult:
-    """Best-of-3. Shields are consumed in place from the passed-in dict."""
+    """Best-of-3. Shields are consumed in place from the passed-in dict.
+
+    `attacker_power_multiplier` lets buffs (e.g. red_buff) inflate the
+    attacker's effective Power without touching combat math elsewhere.
+    """
     if not attacker_loadout:
         raise ValueError("Attacker has no equipped champions.")
     if not defender_loadout:
@@ -279,6 +287,7 @@ def simulate_skirmish(
             attacker_prestige=attacker_prestige,
             defender_prestige=defender_prestige,
             defender_shields=shields,
+            attacker_power_multiplier=attacker_power_multiplier,
             rng=rng,
         )
         rounds.append(result)

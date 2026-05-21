@@ -20,6 +20,7 @@ COGS = (
     "bot.cogs.inventory",
     "bot.cogs.loadout",
     "bot.cogs.actions",
+    "bot.cogs.pve",
     "bot.cogs.pvp",
     "bot.cogs.trading",
     "bot.cogs.godlike",

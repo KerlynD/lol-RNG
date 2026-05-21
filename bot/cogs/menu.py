@@ -72,13 +72,15 @@ class Menu(commands.Cog):
 
         user_id = interaction.user.id
         user = await queries.get_user(user_id)
-        loadout = await queries.get_loadout(user_id)
+        loadout = await queries.alive_loadout(user_id)
+        full_loadout = await queries.get_loadout(user_id)
+        dead_champs = await queries.dead_champions_for_user(user_id)
         cooldowns = await queries.get_all_cooldowns(user_id)
         inventory = await queries.get_inventory(user_id)
         unlocks = unlocks_for(user.level)
         roll_tokens = inventory.get("roll_token", 0)
 
-        # Bucket every action by eligibility status.
+        # Bucket every action by eligibility status — only over ALIVE loadout.
         buckets: dict[str, list] = {
             ELIGIBLE: [],
             COOLDOWN: [],
@@ -90,9 +92,14 @@ class Menu(commands.Cog):
             buckets[av.status].append(av)
 
         # ── Header ─────────────────────────────────────────────────────────
+        alive_count = len(loadout)
+        equipped_count = len(full_loadout)
+        loadout_label = f"{alive_count}/{equipped_count}" if equipped_count else "empty"
+        if equipped_count and alive_count < equipped_count:
+            loadout_label += " alive"
         header_lines = [
             f"**Level** {user.level} · **{user.gold:,} Gold** · **{roll_tokens} Roll Token(s)**",
-            f"**Loadout** {len(loadout)}/{unlocks.loadout_slots} · "
+            f"**Loadout** {loadout_label}/{unlocks.loadout_slots} · "
             f"**Action tiers unlocked** T1–T{unlocks.max_action_tier}",
         ]
         if user.prestige > 0:
@@ -103,6 +110,42 @@ class Menu(commands.Cog):
             description="\n".join(header_lines),
             color=0x3F51B5,
         )
+
+        # ── PVE Hunt ────────────────────────────────────────────────────────
+        hunt_cd = cooldowns.get("hunt-camp")
+        hunt_lines: list[str] = []
+        if hunt_cd is None:
+            if loadout:
+                hunt_lines.append("✅ **`/hunt-camp` ready** — wander into the jungle.")
+            else:
+                hunt_lines.append("✅ `/hunt-camp` ready — but you have no alive champion.")
+        else:
+            hunt_lines.append(f"⏳ Next hunt in **{_format_seconds(hunt_cd)}**.")
+        # Active buffs / souls
+        if inventory.get("red_buff", 0) > 0:
+            hunt_lines.append(f"🔴 Red Buff ×{inventory['red_buff']} — next fight +10% win.")
+        if inventory.get("blue_buff", 0) > 0:
+            hunt_lines.append(f"🔵 Blue Buff ×{inventory['blue_buff']} — next action skips cooldown.")
+        owned_souls = [
+            k.replace("dragon_soul_", "").title()
+            for k in inventory
+            if k.startswith("dragon_soul_") and inventory[k] > 0
+        ]
+        if owned_souls:
+            hunt_lines.append("🐉 Dragon Souls: " + ", ".join(sorted(owned_souls)))
+        embed.add_field(name="🌲 PVE", value="\n".join(hunt_lines), inline=False)
+
+        # ── Dead champions ──────────────────────────────────────────────────
+        if dead_champs:
+            dead_lines = [
+                f"💀 **{name}** — revives in {_format_seconds(remaining)}"
+                for _, name, remaining in dead_champs
+            ]
+            embed.add_field(
+                name=f"💀 Dead ({len(dead_champs)})",
+                value="\n".join(dead_lines)[:1024],
+                inline=False,
+            )
 
         # ── Available actions ──────────────────────────────────────────────
         if buckets[ELIGIBLE]:

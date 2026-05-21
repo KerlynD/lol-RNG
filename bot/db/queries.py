@@ -319,6 +319,88 @@ async def get_loadout(discord_id: int) -> list[LoadoutEntry]:
     return [LoadoutEntry(slot=r["slot"], champion=_row_to_champion(r)) for r in rows]
 
 
+# ----------------------------------------------------------------------------
+# Champion respawn (PVE death system, PRD v2)
+# ----------------------------------------------------------------------------
+# Champion respawn cooldowns ride on the existing `cooldowns` table using the
+# convention `action_key = '_champ:{champion_id}'`. A champion is "dead" if a
+# cooldown with that key exists with available_at > NOW().
+
+CHAMP_RESPAWN_PREFIX = "_champ:"
+
+
+def _champ_respawn_key(champion_id: int) -> str:
+    return f"{CHAMP_RESPAWN_PREFIX}{champion_id}"
+
+
+async def kill_champion(
+    discord_id: int, champion_id: int, duration: timedelta,
+    *, conn: asyncpg.Connection | None = None,
+) -> None:
+    """Stamp a respawn cooldown for the given champion."""
+    until = datetime.now(tz=timezone.utc) + duration
+    query = """
+        INSERT INTO cooldowns (user_id, action_key, available_at)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, action_key)
+        DO UPDATE SET available_at = EXCLUDED.available_at
+    """
+    if conn is not None:
+        await conn.execute(query, discord_id, _champ_respawn_key(champion_id), until)
+    else:
+        await get_pool().execute(query, discord_id, _champ_respawn_key(champion_id), until)
+
+
+async def champion_is_alive(discord_id: int, champion_id: int) -> bool:
+    """Returns True if the champion has no active respawn cooldown."""
+    row = await get_pool().fetchrow(
+        "SELECT available_at FROM cooldowns WHERE user_id = $1 AND action_key = $2",
+        discord_id, _champ_respawn_key(champion_id),
+    )
+    if row is None:
+        return True
+    return row["available_at"] <= datetime.now(tz=timezone.utc)
+
+
+async def alive_loadout(discord_id: int) -> list[LoadoutEntry]:
+    """Same as get_loadout but skips champions in respawn cooldown."""
+    rows = await get_pool().fetch(
+        """
+        SELECT l.slot, c.*
+          FROM loadouts l
+          JOIN champions c ON c.id = l.champion_id
+          LEFT JOIN cooldowns cd
+                 ON cd.user_id = l.user_id
+                AND cd.action_key = '_champ:' || c.id::text
+                AND cd.available_at > NOW()
+         WHERE l.user_id = $1 AND cd.action_key IS NULL
+         ORDER BY l.slot
+        """,
+        discord_id,
+    )
+    return [LoadoutEntry(slot=r["slot"], champion=_row_to_champion(r)) for r in rows]
+
+
+async def dead_champions_for_user(discord_id: int) -> list[tuple[int, str, float]]:
+    """Return (champion_id, name, seconds_remaining) for each dead champion in the user's loadout."""
+    rows = await get_pool().fetch(
+        """
+        SELECT c.id, c.name,
+               EXTRACT(EPOCH FROM (cd.available_at - NOW())) AS remaining
+          FROM loadouts l
+          JOIN champions c ON c.id = l.champion_id
+          JOIN cooldowns cd
+            ON cd.user_id = l.user_id
+           AND cd.action_key = '_champ:' || c.id::text
+           AND cd.available_at > NOW()
+         WHERE l.user_id = $1
+         ORDER BY cd.available_at
+        """,
+        discord_id,
+    )
+    return [(r["id"], r["name"], float(r["remaining"])) for r in rows]
+
+
 async def set_loadout_slot(discord_id: int, slot: int, champion_id: int) -> None:
     await get_pool().execute(
         """
