@@ -105,18 +105,26 @@ The bot autoruns migrations on startup, so the first deploy seeds the DB.
 - [x] PvP combat (best-of-3 multi-round skirmish, typed shields, 3/24h cap)
 - [x] Trading (1h expiry, flat 500 gold tax, locked champions)
 - [x] Prestige (Lv30 reset, +5% gold, Death-tier rate boost)
+- [x] **v2 PVE:** random `/hunt-camp` with engage/back-out, champion death (5–15 min respawns), punishing tier-diff curve, red_buff / blue_buff consumables, dragon souls
+- [x] **v2 World bosses:** Baron / Herald / Atakhan / Elder spawn 1–2x per week, 1–2h windows, multi-strike, top-3 split rewards
+- [x] **v2 Ambient encounters:** opt-in surprise pings (~20–40 min) with persistent Fight/Run buttons
+- [x] **v2 Regional exploration:** `/explore` 11 regions, 33 hand-authored vignettes, lore collection
 
 ## Commands at a glance
 
-- **Discovery:** `/menu` — personalized "what can I do right now" dashboard
+- **Discovery:** `/menu` — personalized "what can I do right now" dashboard (now shows PVE camps, dead champs, world boss, ambient state, regional availability)
 - **Core:** `/profile` `/inventory` `/champions` `/shields` `/loadout` `/equip` `/unequip` `/lock` `/unlock`
 - **Rolling:** `/roll` `/roll10` `/roll100` `/roll1000` `/redeem-fragment`
 - **Daily-loop:** `/daily` `/work` `/beg`
-- **Yordle/region:** `/forage` `/tinker` `/patrol-demacia` `/meditate-ionia` `/hunt-shadowisles`
+- **PVE:** `/hunt-camp` (random encounter) · `/explore region:<choice>` · `/lore`
+- **World boss:** `/worldboss` `/strike`
+- **Ambient:** `/ambient-toggle` `/settings`
+- **Yordle/region actions:** `/forage` `/tinker` `/patrol-demacia` `/meditate-ionia` `/hunt-shadowisles`
 - **PvP:** `/attack` `/duel` `/prank` `/raid-noxus` `/heist-piltover`
-- **Faction:** `/ascend` `/darkin-pact` `/defend-targon` `/void-touch`
-- **Legendary:** `/void-incursion` `/celestial-gaze` `/freljord-storm` `/judgment`
-- **God:** `/reshape-stars` `/world-ender` `/wander` `/portal`
+- **Faction actions:** `/ascend` `/darkin-pact` `/defend-targon` `/void-touch`
+- **Legendary actions:** `/void-incursion` `/celestial-gaze` `/freljord-storm` `/judgment`
+- **God actions:** `/reshape-stars` `/world-ender` `/wander` `/portal`
 - **Death (Kindred):** `/reap` `/lambs-respite` `/eternal-hunt` `/spy` `/never-one-without-the-other`
 - **Trading:** `/trade` `/accept` `/decline` `/cancel` `/trades` `/trade-log`
+- **Admin:** `/admin-set-boss-channel` `/admin-set-ambient-channel` `/admin-spawn-boss`
 - **Endgame:** `/prestige`
