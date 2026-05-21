@@ -8,8 +8,22 @@ from discord.ext import commands
 
 from bot.config import Settings
 from bot.db import migrate, pool
+from bot.tasks.reap_expiry import sweep_expired_reap_marks
+from bot.tasks.trade_expiry import sweep_expired_trades
 
 log = logging.getLogger("lol-rng")
+
+COGS = (
+    "bot.cogs.admin",
+    "bot.cogs.rolling",
+    "bot.cogs.inventory",
+    "bot.cogs.loadout",
+    "bot.cogs.actions",
+    "bot.cogs.pvp",
+    "bot.cogs.trading",
+    "bot.cogs.godlike",
+    "bot.cogs.prestige",
+)
 
 
 class LolRngBot(commands.Bot):
@@ -23,15 +37,28 @@ class LolRngBot(commands.Bot):
         await pool.init_pool(self.settings.database_url)
         await migrate.run(self.settings.drop_weight_seed)
 
-        await self.load_extension("bot.cogs.admin")
+        for cog in COGS:
+            try:
+                await self.load_extension(cog)
+            except Exception:
+                log.exception("Failed to load %s", cog)
+                raise
 
         guild = discord.Object(id=self.settings.discord_guild_id)
         self.tree.copy_global_to(guild=guild)
         synced = await self.tree.sync(guild=guild)
         log.info("Synced %d slash commands to guild %s", len(synced), self.settings.discord_guild_id)
 
+        sweep_expired_trades.start()
+        sweep_expired_reap_marks.start()
+        log.info("Background sweeps started.")
+
     async def close(self) -> None:
         try:
+            if sweep_expired_trades.is_running():
+                sweep_expired_trades.cancel()
+            if sweep_expired_reap_marks.is_running():
+                sweep_expired_reap_marks.cancel()
             await pool.close_pool()
         finally:
             await super().close()
