@@ -31,6 +31,7 @@ class User:
     prestige: int
     starter_token_granted: bool
     last_loadout_swap: datetime | None
+    ambient_events_opt_in: bool = False
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,7 @@ async def get_all_champions() -> list[Champion]:
 
 
 def _row_to_user(row: asyncpg.Record) -> User:
+    keys = row.keys()
     return User(
         discord_id=row["discord_id"],
         gold=row["gold"],
@@ -125,6 +127,7 @@ def _row_to_user(row: asyncpg.Record) -> User:
         prestige=row["prestige"],
         starter_token_granted=row["starter_token_granted"],
         last_loadout_swap=row["last_loadout_swap"],
+        ambient_events_opt_in=row["ambient_events_opt_in"] if "ambient_events_opt_in" in keys else False,
     )
 
 
@@ -379,6 +382,293 @@ async def alive_loadout(discord_id: int) -> list[LoadoutEntry]:
         discord_id,
     )
     return [LoadoutEntry(slot=r["slot"], champion=_row_to_champion(r)) for r in rows]
+
+
+# ----------------------------------------------------------------------------
+# World bosses (PRD v2 Phase B)
+# ----------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class WorldBoss:
+    id: int
+    boss_key: str
+    channel_id: int
+    hp_total: int
+    hp_remaining: int
+    status: str
+    spawned_at: datetime
+    expires_at: datetime
+    resolved_at: datetime | None
+
+
+def _row_to_world_boss(row: asyncpg.Record) -> WorldBoss:
+    return WorldBoss(
+        id=row["id"],
+        boss_key=row["boss_key"],
+        channel_id=row["channel_id"],
+        hp_total=row["hp_total"],
+        hp_remaining=row["hp_remaining"],
+        status=row["status"],
+        spawned_at=row["spawned_at"],
+        expires_at=row["expires_at"],
+        resolved_at=row["resolved_at"],
+    )
+
+
+async def spawn_world_boss(
+    boss_key: str, channel_id: int, hp_total: int, duration: timedelta
+) -> WorldBoss:
+    expires_at = datetime.now(tz=timezone.utc) + duration
+    row = await get_pool().fetchrow(
+        """
+        INSERT INTO world_bosses (boss_key, channel_id, hp_total, hp_remaining, expires_at)
+        VALUES ($1, $2, $3, $3, $4)
+        RETURNING *
+        """,
+        boss_key, channel_id, hp_total, expires_at,
+    )
+    return _row_to_world_boss(row)
+
+
+async def get_active_world_boss() -> WorldBoss | None:
+    row = await get_pool().fetchrow(
+        "SELECT * FROM world_bosses WHERE status = 'active' ORDER BY spawned_at DESC LIMIT 1"
+    )
+    return _row_to_world_boss(row) if row else None
+
+
+async def apply_strike(boss_id: int, attacker_id: int, damage: int) -> tuple[int, bool]:
+    """Atomically apply damage to a boss. Returns (new_hp_remaining, defeated).
+
+    Returns (-1, False) if the boss is no longer active.
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE world_bosses
+                   SET hp_remaining = GREATEST(0, hp_remaining - $2)
+                 WHERE id = $1 AND status = 'active'
+                 RETURNING hp_remaining
+                """,
+                boss_id, damage,
+            )
+            if row is None:
+                return -1, False
+            new_hp = row["hp_remaining"]
+            actual_damage = damage if new_hp > 0 else damage  # caller knows base damage
+            await conn.execute(
+                """
+                INSERT INTO world_boss_damage (boss_id, user_id, damage_dealt)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (boss_id, user_id)
+                DO UPDATE SET damage_dealt = world_boss_damage.damage_dealt + $3,
+                              last_strike_at = NOW()
+                """,
+                boss_id, attacker_id, actual_damage,
+            )
+            defeated = new_hp <= 0
+            if defeated:
+                await conn.execute(
+                    "UPDATE world_bosses SET status = 'defeated', resolved_at = NOW() WHERE id = $1",
+                    boss_id,
+                )
+    return new_hp, defeated
+
+
+async def list_top_strikers(boss_id: int, limit: int = 5) -> list[tuple[int, int]]:
+    """Returns (user_id, damage_dealt) ordered by damage desc."""
+    rows = await get_pool().fetch(
+        """
+        SELECT user_id, damage_dealt FROM world_boss_damage
+         WHERE boss_id = $1
+         ORDER BY damage_dealt DESC
+         LIMIT $2
+        """,
+        boss_id, limit,
+    )
+    return [(r["user_id"], r["damage_dealt"]) for r in rows]
+
+
+async def expire_old_world_bosses() -> list[WorldBoss]:
+    """Mark active bosses past expires_at as expired. Returns the bosses that just expired."""
+    rows = await get_pool().fetch(
+        """
+        UPDATE world_bosses
+           SET status = 'expired', resolved_at = NOW()
+         WHERE status = 'active' AND expires_at <= NOW()
+         RETURNING *
+        """,
+    )
+    return [_row_to_world_boss(r) for r in rows]
+
+
+# Server config (per-server key/value store; v2 = single-server bot so this
+# IS server-wide).
+
+
+async def get_config(key: str) -> str | None:
+    return await get_pool().fetchval("SELECT value FROM server_config WHERE key = $1", key)
+
+
+async def set_config(key: str, value: str) -> None:
+    await get_pool().execute(
+        """
+        INSERT INTO server_config (key, value) VALUES ($1, $2)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """,
+        key, value,
+    )
+
+
+# Activity-based count for HP scaling.
+
+
+async def active_users_last_7d() -> int:
+    """Distinct users who set any non-internal cooldown in the last 7 days."""
+    val = await get_pool().fetchval(
+        """
+        SELECT COUNT(DISTINCT user_id) FROM cooldowns
+         WHERE NOT action_key LIKE '\\_%' ESCAPE '\\'
+           AND available_at > NOW() - INTERVAL '7 days'
+        """
+    )
+    return val or 0
+
+
+async def get_strike_cooldown(user_id: int, boss_id: int) -> float | None:
+    """Returns seconds remaining on a per-user, per-boss strike cooldown."""
+    return await check_cooldown(user_id, f"_strike:{boss_id}")
+
+
+async def set_strike_cooldown(user_id: int, boss_id: int, duration: timedelta) -> None:
+    await set_cooldown(user_id, f"_strike:{boss_id}", duration)
+
+
+# ----------------------------------------------------------------------------
+# Ambient events (PRD v2 Phase B)
+# ----------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AmbientEvent:
+    id: int
+    target_id: int
+    channel_id: int
+    message_id: int | None
+    event_type: str
+    status: str
+    spawned_at: datetime
+    expires_at: datetime
+    resolved_at: datetime | None
+
+
+def _row_to_ambient(row: asyncpg.Record) -> AmbientEvent:
+    return AmbientEvent(
+        id=row["id"],
+        target_id=row["target_id"],
+        channel_id=row["channel_id"],
+        message_id=row["message_id"],
+        event_type=row["event_type"],
+        status=row["status"],
+        spawned_at=row["spawned_at"],
+        expires_at=row["expires_at"],
+        resolved_at=row["resolved_at"],
+    )
+
+
+async def set_ambient_opt_in(discord_id: int, opt_in: bool) -> None:
+    await get_pool().execute(
+        "UPDATE users SET ambient_events_opt_in = $2 WHERE discord_id = $1",
+        discord_id, opt_in,
+    )
+
+
+async def list_opted_in_active_users(
+    *, active_days: int = 7, ambient_cooldown_min: int = 20
+) -> list[int]:
+    """Users opted in, with recent activity, and no pending event AND no event in last 20 min."""
+    rows = await get_pool().fetch(
+        """
+        SELECT u.discord_id FROM users u
+         WHERE u.ambient_events_opt_in = TRUE
+           AND EXISTS (
+                 SELECT 1 FROM cooldowns c
+                  WHERE c.user_id = u.discord_id
+                    AND NOT c.action_key LIKE '\\_%' ESCAPE '\\'
+                    AND c.available_at > NOW() - ($1::int || ' days')::interval
+               )
+           AND NOT EXISTS (
+                 SELECT 1 FROM ambient_events e
+                  WHERE e.target_id = u.discord_id
+                    AND (
+                          e.status = 'pending'
+                       OR e.resolved_at > NOW() - ($2::int || ' minutes')::interval
+                    )
+               )
+        """,
+        active_days, ambient_cooldown_min,
+    )
+    return [r["discord_id"] for r in rows]
+
+
+async def create_ambient_event(
+    target_id: int, channel_id: int, event_type: str, ttl: timedelta
+) -> AmbientEvent:
+    expires_at = datetime.now(tz=timezone.utc) + ttl
+    row = await get_pool().fetchrow(
+        """
+        INSERT INTO ambient_events (target_id, channel_id, event_type, expires_at)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *
+        """,
+        target_id, channel_id, event_type, expires_at,
+    )
+    return _row_to_ambient(row)
+
+
+async def set_ambient_message_id(event_id: int, message_id: int) -> None:
+    await get_pool().execute(
+        "UPDATE ambient_events SET message_id = $2 WHERE id = $1",
+        event_id, message_id,
+    )
+
+
+async def get_ambient_event(event_id: int) -> AmbientEvent | None:
+    row = await get_pool().fetchrow("SELECT * FROM ambient_events WHERE id = $1", event_id)
+    return _row_to_ambient(row) if row else None
+
+
+async def resolve_ambient_event(
+    event_id: int, status: str, gold: int, xp: int,
+    *, conn: asyncpg.Connection | None = None,
+) -> bool:
+    """Mark event resolved. Returns True if it was previously pending."""
+    query = """
+        UPDATE ambient_events
+           SET status = $2, resolved_at = NOW(), outcome_gold = $3, outcome_xp = $4
+         WHERE id = $1 AND status = 'pending'
+         RETURNING 1
+    """
+    if conn is not None:
+        val = await conn.fetchval(query, event_id, status, gold, xp)
+    else:
+        val = await get_pool().fetchval(query, event_id, status, gold, xp)
+    return val is not None
+
+
+async def expire_pending_ambient_events() -> list[AmbientEvent]:
+    rows = await get_pool().fetch(
+        """
+        UPDATE ambient_events
+           SET status = 'expired', resolved_at = NOW()
+         WHERE status = 'pending' AND expires_at <= NOW()
+         RETURNING *
+        """,
+    )
+    return [_row_to_ambient(r) for r in rows]
 
 
 async def dead_champions_for_user(discord_id: int) -> list[tuple[int, str, float]]:

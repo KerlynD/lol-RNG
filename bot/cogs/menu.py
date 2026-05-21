@@ -265,6 +265,46 @@ class Menu(commands.Cog):
             pvp_lines.append("_You need at least one equipped champion to attack._")
         embed.add_field(name="⚔ PvP status", value="\n".join(pvp_lines), inline=False)
 
+        # ── World boss (if active) ─────────────────────────────────────────
+        boss = await queries.get_active_world_boss()
+        if boss is not None:
+            from bot.game.pve.world_bosses import WORLD_BOSSES
+            spec = WORLD_BOSSES.get(boss.boss_key)
+            name = spec.name if spec else boss.boss_key
+            hp_pct = int(round(100 * boss.hp_remaining / max(1, boss.hp_total)))
+            secs_left = int((boss.expires_at - boss.spawned_at).total_seconds())
+            top = await queries.list_top_strikers(boss.id, limit=1)
+            you_dealt = 0
+            if top:
+                top_uid, top_dmg = top[0]
+                top_line = f"Top: <@{top_uid}> ({top_dmg:,} dmg)"
+            else:
+                top_line = "_no strikers yet_"
+            # Quick lookup: did the user strike?
+            user_top = await queries.list_top_strikers(boss.id, limit=20)
+            for uid, dmg in user_top:
+                if uid == user_id:
+                    you_dealt = dmg
+                    break
+            embed.add_field(
+                name=f"🐉 World Boss — {name}",
+                value=(
+                    f"HP: **{boss.hp_remaining:,} / {boss.hp_total:,}** ({hp_pct}%)\n"
+                    f"Expires: <t:{int(boss.expires_at.timestamp())}:R>\n"
+                    f"{top_line}\n"
+                    + (f"_You've dealt {you_dealt:,} damage._" if you_dealt else "_Use `/strike` to engage._")
+                ),
+                inline=False,
+            )
+
+        # ── Ambient encounter status ───────────────────────────────────────
+        ambient_line = (
+            "ON — ambient encounters may surprise you every ~20–40 min."
+            if user.ambient_events_opt_in
+            else "OFF — turn on with `/ambient-toggle opt_in:True`."
+        )
+        embed.add_field(name="⚙ Ambient encounters", value=ambient_line, inline=False)
+
         # ── Active effects (only if any) ───────────────────────────────────
         active = []
         if immune_remaining is not None:

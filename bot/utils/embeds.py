@@ -246,6 +246,31 @@ def encounter_embed(camp, champ, win_pct: float) -> discord.Embed:
     )
 
 
+def world_boss_embed(boss, spec, top_strikers, you_dealt) -> discord.Embed:
+    """Status embed for an active world boss."""
+    name = spec.name if spec else boss.boss_key
+    hp_pct = int(round(100 * boss.hp_remaining / max(1, boss.hp_total)))
+    lines = [
+        f"**HP:** {boss.hp_remaining:,} / {boss.hp_total:,} ({hp_pct}%)",
+        f"**Expires:** <t:{int(boss.expires_at.timestamp())}:R>",
+    ]
+    if top_strikers:
+        lines.append("")
+        lines.append("**Top strikers:**")
+        for i, (uid, dmg) in enumerate(top_strikers):
+            lines.append(f"  {i + 1}. <@{uid}> — {dmg:,}")
+    lines.append("")
+    if you_dealt > 0:
+        lines.append(f"_You've dealt {you_dealt:,} damage._")
+    else:
+        lines.append("_You haven't struck this boss yet — use `/strike`._")
+    return discord.Embed(
+        title=f"🐉 {name}",
+        description="\n".join(lines),
+        color=0xFFD700 if hp_pct > 50 else (0xFF9800 if hp_pct > 20 else 0xF44336),
+    )
+
+
 def camp_result_embed(camp, champ, outcome) -> discord.Embed:
     """Post-engage result card."""
     fight = outcome.fight
