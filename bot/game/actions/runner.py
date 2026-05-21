@@ -39,6 +39,83 @@ class ActionSuccess:
     synergy_bonus_applied: bool
 
 
+# Eligibility status used by the /menu dashboard.
+ELIGIBLE = "available"
+COOLDOWN = "cooldown"
+LEVEL_LOCKED = "level_locked"
+LOADOUT_LOCKED = "loadout_locked"
+
+
+@dataclass(frozen=True)
+class ActionAvailability:
+    status: str                       # one of ELIGIBLE / COOLDOWN / LEVEL_LOCKED / LOADOUT_LOCKED
+    spec: ActionSpec
+    seconds_remaining: float | None = None
+    chosen_champ_name: str | None = None
+    missing_requirement: str | None = None
+    required_level: int | None = None
+
+
+def check_eligibility(
+    spec: ActionSpec,
+    user_level: int,
+    loadout: list[LoadoutEntry],
+    cooldowns: dict[str, float],
+) -> ActionAvailability:
+    """Pure check (no DB writes, no side effects). Used by /menu."""
+    from bot.game.leveling import unlocks_for
+    unlocks = unlocks_for(user_level)
+
+    if spec.tier > unlocks.max_action_tier:
+        return ActionAvailability(
+            status=LEVEL_LOCKED,
+            spec=spec,
+            required_level=_min_level_for_tier(spec.tier),
+        )
+
+    chosen = _check_loadout_requirement(spec, loadout)
+    needs_champ = (
+        spec.required_champion is not None
+        or spec.required_region is not None
+        or spec.required_factions
+        or spec.min_champ_tier > 0
+    )
+    if needs_champ and chosen is None:
+        return ActionAvailability(
+            status=LOADOUT_LOCKED,
+            spec=spec,
+            missing_requirement=_loadout_requirement_text(spec),
+        )
+
+    remaining = cooldowns.get(spec.key)
+    if remaining is not None:
+        return ActionAvailability(
+            status=COOLDOWN,
+            spec=spec,
+            seconds_remaining=remaining,
+            chosen_champ_name=chosen.name if chosen else None,
+        )
+
+    return ActionAvailability(
+        status=ELIGIBLE,
+        spec=spec,
+        chosen_champ_name=chosen.name if chosen else None,
+    )
+
+
+def _loadout_requirement_text(spec: ActionSpec) -> str:
+    if spec.required_champion:
+        return spec.required_champion
+    parts: list[str] = []
+    if spec.required_region:
+        parts.append(spec.required_region)
+    if spec.required_factions:
+        parts.append("/".join(spec.required_factions))
+    if spec.min_champ_tier > 0:
+        parts.append(f"T{spec.min_champ_tier}+")
+    return ", ".join(parts) if parts else "any champion"
+
+
 def _check_loadout_requirement(
     spec: ActionSpec, loadout: list[LoadoutEntry]
 ) -> Champion | None:

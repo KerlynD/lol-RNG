@@ -15,6 +15,7 @@ log = logging.getLogger("lol-rng")
 
 COGS = (
     "bot.cogs.admin",
+    "bot.cogs.menu",
     "bot.cogs.rolling",
     "bot.cogs.inventory",
     "bot.cogs.loadout",
