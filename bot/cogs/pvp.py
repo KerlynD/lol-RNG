@@ -14,7 +14,7 @@ from bot.utils.embeds import (
     TIER_NAME,
     failure_embed,
     info_embed,
-    skirmish_embed,
+    skirmish_embeds,
 )
 
 log = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class PvP(commands.Cog):
             return
 
         await interaction.response.send_message(
-            embed=skirmish_embed(
+            embeds=skirmish_embeds(
                 interaction.user, target, outcome.skirmish, outcome.gold_transferred
             )
         )

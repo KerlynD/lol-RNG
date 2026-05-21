@@ -22,7 +22,7 @@ from bot.game.rolling import (
     roll_champion,
 )
 from bot.utils.decorators import register_user
-from bot.utils.embeds import failure_embed, info_embed, pull_embed
+from bot.utils.embeds import TIER_NAME, failure_embed, info_embed, pull_embed
 
 log = logging.getLogger(__name__)
 
@@ -140,21 +140,25 @@ async def _do_bulk_rolls(interaction: discord.Interaction, n: int) -> None:
     grouped = await _champs_by_tier()
 
     new_champs: list[Champion] = []
+    dupe_champs: list[Champion] = []
     dupe_by_tier: dict[int, int] = {}
     reaped: list[tuple[Champion, int]] = []   # (champ, caster_id)
+    all_pulled: list[Champion] = []
 
     rng = random.Random()
     for _ in range(n):
         result = roll_champion(1, grouped, prestige=user.prestige, rng=rng)
         champ, was_dupe, _frag_qty, reap_to = await _resolve_pull(user_id, result.champion)
+        all_pulled.append(champ)
         if reap_to is not None:
             reaped.append((champ, reap_to))
         elif was_dupe:
+            dupe_champs.append(champ)
             dupe_by_tier[champ.tier] = dupe_by_tier.get(champ.tier, 0) + 1
         else:
             new_champs.append(champ)
 
-    embed = _bulk_roll_summary_embed(n, cost, new_champs, dupe_by_tier, reaped)
+    embed = _bulk_roll_summary_embed(n, cost, new_champs, dupe_by_tier, reaped, all_pulled)
     await interaction.followup.send(embed=embed)
 
 
@@ -164,17 +168,24 @@ def _bulk_roll_summary_embed(
     new_champs: list[Champion],
     dupe_by_tier: dict[int, int],
     reaped: list[tuple[Champion, int]],
+    all_pulled: list[Champion],
 ) -> discord.Embed:
-    # Color by best pull tier
-    best_tier = max(
-        (c.tier for c in new_champs),
-        default=max(dupe_by_tier.keys(), default=1),
+    # Pick the highest-tier overall pull for the headline splash (new OR dupe).
+    highlight: Champion | None = (
+        max(all_pulled, key=lambda c: c.tier) if all_pulled else None
     )
+    headline_tier = highlight.tier if highlight else 1
     embed = discord.Embed(
         title=f"🎲 {n} Rolls",
-        description=f"Spent **{cost:,} Gold**",
-        color=_TIER_COLORS.get(best_tier, 0x607D8B),
+        description=f"Spent **{cost:,} Gold**"
+        + (
+            f"\n\n✨ Highlight pull: **{highlight.name}** ({TIER_NAME[highlight.tier]})"
+            if highlight else ""
+        ),
+        color=_TIER_COLORS.get(headline_tier, 0x607D8B),
     )
+    if highlight and highlight.splash_url:
+        embed.set_image(url=highlight.splash_url)
 
     if new_champs:
         # Sort by tier desc, then name.
@@ -194,7 +205,6 @@ def _bulk_roll_summary_embed(
         )
 
     if dupe_by_tier:
-        from bot.utils.embeds import TIER_NAME
         lines = [
             f"  {TIER_NAME[t]}: ×{q}"
             for t, q in sorted(dupe_by_tier.items(), reverse=True)

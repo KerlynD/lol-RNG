@@ -20,7 +20,7 @@ from bot.utils.embeds import (
     action_result_embed,
     cooldown_embed,
     failure_embed,
-    skirmish_embed,
+    skirmish_embeds,
 )
 
 log = logging.getLogger(__name__)
@@ -271,7 +271,7 @@ class Actions(commands.Cog):
             return
 
         await interaction.followup.send(
-            embed=skirmish_embed(
+            embeds=skirmish_embeds(
                 interaction.user, target, outcome.skirmish, outcome.gold_transferred
             )
         )

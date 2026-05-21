@@ -62,6 +62,7 @@ def _slot_line(slot: int, champ: Champion | None) -> str:
 
 
 async def _build_dashboard_embed(user_id: int) -> discord.Embed:
+    """Single-embed view (legacy compat — used in sub-view back transitions)."""
     user = await queries.get_user(user_id)
     entries = await queries.get_loadout(user_id)
     owned = await queries.list_owned(user_id)
@@ -91,11 +92,63 @@ async def _build_dashboard_embed(user_id: int) -> discord.Embed:
         description=desc,
         color=0x3F51B5,
     )
-    # Thumbnail = highest-tier equipped champion's tile, if any.
     if entries:
         top = max((e.champion for e in entries), key=lambda c: c.tier)
         embed.set_thumbnail(url=tile_url(top.name))
     return embed
+
+
+async def _build_dashboard_embeds(user_id: int, display_name: str) -> list[discord.Embed]:
+    """Multi-embed dashboard: header + one embed per slot with champion icon."""
+    user = await queries.get_user(user_id)
+    entries = await queries.get_loadout(user_id)
+    owned = await queries.list_owned(user_id)
+    dead = {cid for cid, _, _ in await queries.dead_champions_for_user(user_id)}
+    cap = unlocks_for(user.level).loadout_slots
+
+    by_slot: dict[int, Champion] = {e.slot: e.champion for e in entries}
+    embeds: list[discord.Embed] = []
+
+    # Header embed
+    remaining = _swap_cooldown_remaining(user.last_loadout_swap)
+    header_desc = f"Slots: **{len(entries)}/{cap}** equipped · Owned: **{len(owned)}**"
+    if remaining > 0:
+        header_desc += f"\nSwap cooldown: **{_format_seconds(remaining)}**"
+    header_desc += "\n\nUse the buttons below to edit or browse your collection."
+    header = discord.Embed(
+        title=f"{display_name}'s loadout",
+        description=header_desc,
+        color=0x3F51B5,
+    )
+    embeds.append(header)
+
+    # One embed per slot
+    for slot in range(1, cap + 1):
+        champ = by_slot.get(slot)
+        if champ is None:
+            slot_embed = discord.Embed(
+                title=f"Slot {slot}",
+                description="_empty_",
+                color=0x607D8B,
+            )
+        else:
+            is_dead = champ.id in dead
+            tier_name = TIER_NAME[champ.tier]
+            desc_lines = [
+                f"**{champ.name}**",
+                f"T{champ.tier} {tier_name} · {champ.region or '—'} · {champ.damage_type}",
+            ]
+            if is_dead:
+                desc_lines.append("💀 _Dead — check /menu for revive timer._")
+            slot_embed = discord.Embed(
+                title=f"Slot {slot}",
+                description="\n".join(desc_lines),
+                color=TIER_COLOR.get(champ.tier, 0x607D8B),
+            )
+            slot_embed.set_thumbnail(url=tile_url(champ.name))
+        embeds.append(slot_embed)
+
+    return embeds
 
 
 async def _username(user_id: int) -> str:
@@ -312,10 +365,9 @@ class _BackToDashButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction) -> None:
         owner_id = getattr(self._parent_view_ref, "owner_id", interaction.user.id)
         display_name = getattr(self._parent_view_ref, "display_name", "Your")
-        embed = await _build_dashboard_embed(owner_id)
-        embed.title = f"{display_name}'s loadout"
+        embeds = await _build_dashboard_embeds(owner_id, display_name)
         view = LoadoutDashView(owner_id, display_name)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embeds=embeds, view=view, attachments=[])
 
 
 # ============================================================================
@@ -412,10 +464,9 @@ class CollectionView(discord.ui.View):
     async def back_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
-        embed = await _build_dashboard_embed(self.owner_id)
-        embed.title = f"{self.display_name}'s loadout"
+        embeds = await _build_dashboard_embeds(self.owner_id, self.display_name)
         view = LoadoutDashView(self.owner_id, self.display_name)
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embeds=embeds, view=view, attachments=[])
 
 
 # ============================================================================
@@ -434,10 +485,9 @@ class Loadout(commands.Cog):
     @register_user
     async def loadout(self, interaction: discord.Interaction) -> None:
         display_name = interaction.user.display_name
-        embed = await _build_dashboard_embed(interaction.user.id)
-        embed.title = f"{display_name}'s loadout"
+        embeds = await _build_dashboard_embeds(interaction.user.id, display_name)
         view = LoadoutDashView(interaction.user.id, display_name)
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+        await interaction.response.send_message(embeds=embeds, view=view, ephemeral=True)
 
     # /lock and /unlock kept as standalone for quick access (also still
     # usable inside the collection workflow later).
