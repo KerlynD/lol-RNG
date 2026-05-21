@@ -165,7 +165,7 @@ def _synergy_multiplier(loadout: list[LoadoutEntry], user_level: int) -> float:
     regions = Counter(e.champion.region for e in loadout if e.champion.region)
     if any(c >= 2 for c in regions.values()):
         mult *= 1.10
-    factions_flat = Counter()
+    factions_flat: Counter[str] = Counter()
     for e in loadout:
         for f in e.champion.factions:
             factions_flat[f] += 1
@@ -175,6 +175,36 @@ def _synergy_multiplier(loadout: list[LoadoutEntry], user_level: int) -> float:
     if any(c >= 2 for c in damage.values()):
         mult *= 1.05
     return mult
+
+
+def synergy_summary(loadout: list[LoadoutEntry], user_level: int) -> list[str]:
+    """User-facing description of the synergies currently active.
+
+    Returns an empty list if the user is below L10 or no synergies trigger.
+    """
+    if user_level < 10 or not loadout:
+        return []
+    lines: list[str] = []
+
+    regions = Counter(e.champion.region for e in loadout if e.champion.region)
+    triggered_regions = [r for r, c in regions.items() if c >= 2]
+    if triggered_regions:
+        lines.append(f"🌍 Region (2+ {', '.join(triggered_regions)}): **+10% action Gold/XP**")
+
+    factions_flat: Counter[str] = Counter()
+    for e in loadout:
+        for f in e.champion.factions:
+            factions_flat[f] += 1
+    triggered_factions = [f for f, c in factions_flat.items() if c >= 3]
+    if triggered_factions:
+        lines.append(f"🏛 Faction (3+ {', '.join(triggered_factions)}): **+10% action Gold/XP**")
+
+    damage = Counter(e.champion.damage_type for e in loadout)
+    triggered_damage = [d for d, c in damage.items() if c >= 2]
+    if triggered_damage:
+        lines.append(f"⚔ Damage type (2+ {', '.join(triggered_damage)}): **+5% action Gold/XP**")
+
+    return lines
 
 
 def _roll_drops(spec: ActionSpec, rng: random.Random) -> list[tuple[str, int]]:
@@ -225,18 +255,23 @@ async def run_action(
                 seconds_remaining=remaining,
             )
 
+    # Ocean soul: +50% gold from /work and /daily.
+    from bot.game.pve.souls import cooldown_factor, gold_factor_for_action
+    ocean_factor = await gold_factor_for_action(user.discord_id, spec.key)
+
     synergy = _synergy_multiplier(loadout, user.level)
     base_scaled = gold_payout(spec.base_gold, user.level, user.prestige)
-    gold_awarded = int(round(base_scaled * synergy))
+    gold_awarded = int(round(base_scaled * synergy * ocean_factor))
     xp_awarded = int(round(spec.base_xp * synergy))
     drops = _roll_drops(spec, rng)
     xp_result = apply_xp(user.xp, user.level, xp_awarded)
 
-    # blue_buff: consume to skip the cooldown of this action (if any).
+    # blue_buff_primed: consume to skip the cooldown of this action (if any).
+    # Requires manual activation via /inventory button.
     blue_buff_consumed = False
     if not bypass_cooldown:
-        if await queries.get_item_qty(user.discord_id, "blue_buff") > 0:
-            if await queries.consume_item(user.discord_id, "blue_buff", 1):
+        if await queries.get_item_qty(user.discord_id, "blue_buff_primed") > 0:
+            if await queries.consume_item(user.discord_id, "blue_buff_primed", 1):
                 blue_buff_consumed = True
 
     pool = get_pool()
@@ -250,8 +285,11 @@ async def run_action(
             for item_type, qty in drops:
                 await queries.add_item(user.discord_id, item_type, qty, conn=conn)
             if not bypass_cooldown and not blue_buff_consumed:
+                # Cloud soul: -20% cooldowns on actions.
+                cd_factor = await cooldown_factor(user.discord_id)
+                effective_cd = spec.cooldown * cd_factor
                 await queries.set_cooldown(
-                    user.discord_id, spec.key, spec.cooldown, conn=conn
+                    user.discord_id, spec.key, effective_cd, conn=conn
                 )
 
     return ActionSuccess(

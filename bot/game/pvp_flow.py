@@ -31,6 +31,37 @@ class PvpOutcome:
     error: str | None = None       # set when a precondition failed
 
 
+async def check_pvp_eligibility(
+    attacker_id: int, defender_id: int
+) -> tuple[str | None, str]:
+    """Returns (failure_reason, eligibility_status) WITHOUT side-effects.
+
+    eligibility_status is one of: 'ok', 'self', 'immune', 'capped', 'no_attacker',
+    'no_defender'. Caller can decide whether to run the action or reject.
+    """
+    if attacker_id == defender_id:
+        return "You can't target yourself.", "self"
+
+    immune_remaining = await queries.check_cooldown(defender_id, LAMBS_RESPITE_COOLDOWN_KEY)
+    if immune_remaining is not None:
+        return "Target is wreathed in Lamb's Respite. Untouchable.", "immune"
+
+    received = await queries.count_recent_attacks_received(defender_id, hours=PVP_CAP_WINDOW_HOURS)
+    if received >= PVP_ATTACKS_RECEIVED_CAP:
+        return "Target is rested — they've been attacked their daily max.", "capped"
+
+    a_load = await queries.alive_loadout(attacker_id)
+    if not a_load:
+        return "You have no alive champion equipped.", "no_attacker"
+
+    await queries.ensure_user(defender_id)
+    d_load = await queries.alive_loadout(defender_id)
+    if not d_load:
+        return "Target has no alive champion equipped.", "no_defender"
+
+    return None, "ok"
+
+
 async def attempt_pvp(
     attacker_id: int,
     defender_id: int,
@@ -113,12 +144,17 @@ async def attempt_pvp(
     }
     auto_tied = inv.get("kindred_passive", 0) > 0
 
-    # red_buff: consume now (atomic) and apply +20% attacker Power.
+    # red_buff: only applies if user has PRIMED it via /inventory button.
     attacker_inv = await queries.get_inventory(attacker_id)
     red_buff_active = False
-    if attacker_inv.get("red_buff", 0) > 0:
-        consumed = await queries.consume_item(attacker_id, "red_buff", 1)
+    if attacker_inv.get("red_buff_primed", 0) > 0:
+        consumed = await queries.consume_item(attacker_id, "red_buff_primed", 1)
         red_buff_active = bool(consumed)
+
+    # Infernal dragon soul: +10% attacker Power (stacks multiplicatively with red_buff).
+    from bot.game.pve.souls import pvp_attacker_power_factor
+    soul_factor = await pvp_attacker_power_factor(attacker_id)
+    power_mult = (1.2 if red_buff_active else 1.0) * soul_factor
 
     skirmish = simulate_skirmish(
         a_load, d_load,
@@ -126,7 +162,7 @@ async def attempt_pvp(
         defender_level=defender.level,
         attacker_prestige=attacker.prestige,
         defender_prestige=defender.prestige,
-        attacker_power_multiplier=(1.2 if red_buff_active else 1.0),
+        attacker_power_multiplier=power_mult,
         defender_shields=shields,
     )
 

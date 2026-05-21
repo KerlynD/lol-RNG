@@ -14,7 +14,7 @@ from discord.ext import commands
 from bot.db import queries
 from bot.game.actions.registry import ACTIONS, ActionSpec
 from bot.game.actions.runner import ActionFailure, ActionSuccess, run_action
-from bot.game.pvp_flow import attempt_pvp
+from bot.game.pvp_flow import attempt_pvp, check_pvp_eligibility
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
     action_result_embed,
@@ -211,13 +211,29 @@ class Actions(commands.Cog):
                 embed=failure_embed("You can't target a bot."), ephemeral=True
             )
             return
-        if target.id == interaction.user.id:
+
+        # PRE-CHECK PvP target FIRST — if the target is immune/rested/no-champ,
+        # we abort the WHOLE command. The action doesn't fire, no Gold/XP gets
+        # paid, no cooldown is set. Single failure embed, no double-message.
+        reason, _status = await check_pvp_eligibility(interaction.user.id, target.id)
+        if reason is not None:
+            # Tailor messages for the most common cases for nicer copy.
+            if _status == "immune":
+                msg = f"{target.display_name} is wreathed in Lamb's Respite. Untouchable."
+            elif _status == "capped":
+                msg = f"{target.display_name} is rested — no more attacks today."
+            elif _status == "no_defender":
+                msg = f"{target.display_name} has no alive champion equipped."
+            elif _status == "no_attacker":
+                msg = "You have no alive champion equipped — check `/menu` for revive timers."
+            else:
+                msg = reason
             await interaction.response.send_message(
-                embed=failure_embed("You can't target yourself."), ephemeral=True
+                embed=failure_embed(msg), ephemeral=True
             )
             return
 
-        # First do the action checks + payout (Gold/XP from running the action itself).
+        # Eligibility confirmed — run the action.
         user = await queries.get_user(interaction.user.id)
         action_result = await run_action(user, key)
         if isinstance(action_result, ActionFailure):
@@ -231,19 +247,19 @@ class Actions(commands.Cog):
 
         await interaction.response.send_message(embed=action_result_embed(action_result))
 
-        # Then resolve PvP layer
+        # Resolve PvP layer. Things can still go sideways (kindred_passive
+        # auto-tie, or the target became immune between the precheck and now),
+        # but those are rare and the user already saw the action result.
         outcome = await attempt_pvp(interaction.user.id, target.id, gold_stake_pct=stake_pct)
         if outcome.error:
             await interaction.followup.send(embed=failure_embed(outcome.error))
             return
-        if outcome.immune:
+        if outcome.immune or outcome.capped:
+            # Edge: defender's state changed between precheck and execution.
             await interaction.followup.send(
-                embed=failure_embed(f"{target.display_name} is wreathed in Lamb's Respite. Untouchable.")
-            )
-            return
-        if outcome.capped:
-            await interaction.followup.send(
-                embed=failure_embed(f"{target.display_name} is rested. No more attacks today.")
+                embed=failure_embed(
+                    f"{target.display_name} slipped away before the strike landed."
+                )
             )
             return
         if outcome.auto_tied:

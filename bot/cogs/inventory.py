@@ -1,4 +1,9 @@
-"""Inventory cog — /inventory, /profile, /champions, /shields."""
+"""Inventory cog — /inventory, /profile, /champions, /shields.
+
+The /inventory embed has Activate buttons for red_buff / blue_buff so
+players can prime them on demand before a big fight. Buffs are inert
+until primed.
+"""
 from __future__ import annotations
 
 import discord
@@ -6,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
+from bot.db.pool import get_pool
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
     TIER_COLOR,
@@ -13,6 +19,82 @@ from bot.utils.embeds import (
     inventory_embed,
     profile_embed,
 )
+
+
+class InventoryView(discord.ui.View):
+    """Interactive controls on /inventory. Lifetime = 3 min."""
+
+    def __init__(self, owner_id: int, inventory: dict[str, int]):
+        super().__init__(timeout=180.0)
+        self.owner_id = owner_id
+        self._refresh_buttons(inventory)
+
+    def _refresh_buttons(self, inventory: dict[str, int]) -> None:
+        red_dormant = inventory.get("red_buff", 0)
+        red_primed = inventory.get("red_buff_primed", 0)
+        blue_dormant = inventory.get("blue_buff", 0)
+        blue_primed = inventory.get("blue_buff_primed", 0)
+
+        self.activate_red.label = (
+            f"Prime Red Buff ({red_dormant})" if red_dormant else "No Red Buff"
+        )
+        self.activate_red.disabled = red_dormant <= 0
+
+        self.activate_blue.label = (
+            f"Prime Blue Buff ({blue_dormant})" if blue_dormant else "No Blue Buff"
+        )
+        self.activate_blue.disabled = blue_dormant <= 0
+
+        # Show primed state as labels on disabled "info" buttons would be too
+        # noisy. We surface the primed count in the embed itself.
+        _ = (red_primed, blue_primed)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "This isn't your inventory.", ephemeral=True
+            )
+            return False
+        return True
+
+    async def _activate(
+        self, interaction: discord.Interaction, dormant_key: str, primed_key: str
+    ) -> None:
+        # Atomically move one dormant → primed.
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                ok = await queries.consume_item(self.owner_id, dormant_key, 1, conn=conn)
+                if not ok:
+                    await interaction.response.send_message(
+                        "You don't have that buff anymore.", ephemeral=True
+                    )
+                    return
+                await queries.add_item(self.owner_id, primed_key, 1, conn=conn)
+
+        # Refresh the embed in place.
+        new_inv = await queries.get_inventory(self.owner_id)
+        user = await queries.get_user(self.owner_id)
+        embed = inventory_embed(new_inv)
+        embed.add_field(name="Gold", value=f"{user.gold:,}", inline=True)
+        self._refresh_buttons(new_inv)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(
+        label="Prime Red Buff", style=discord.ButtonStyle.danger, emoji="🔴"
+    )
+    async def activate_red(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await self._activate(interaction, "red_buff", "red_buff_primed")
+
+    @discord.ui.button(
+        label="Prime Blue Buff", style=discord.ButtonStyle.primary, emoji="🔵"
+    )
+    async def activate_blue(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await self._activate(interaction, "blue_buff", "blue_buff_primed")
 
 
 class Inventory(commands.Cog):
@@ -26,7 +108,29 @@ class Inventory(commands.Cog):
         user = await queries.get_user(interaction.user.id)
         embed = inventory_embed(items)
         embed.add_field(name="Gold", value=f"{user.gold:,}", inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        primed_notes: list[str] = []
+        if items.get("red_buff_primed", 0) > 0:
+            primed_notes.append(
+                f"🔴 Red Buff primed ×{items['red_buff_primed']} — fires on next fight."
+            )
+        if items.get("blue_buff_primed", 0) > 0:
+            primed_notes.append(
+                f"🔵 Blue Buff primed ×{items['blue_buff_primed']} — skips next action cooldown."
+            )
+        if primed_notes:
+            embed.add_field(
+                name="✨ Primed effects",
+                value="\n".join(primed_notes),
+                inline=False,
+            )
+
+        embed.set_footer(
+            text="Shields auto-equip against incoming PvP. Use the buttons below to prime buffs."
+        )
+
+        view = InventoryView(interaction.user.id, items)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
     @app_commands.command(name="shields", description="Quick view of your shield stockpile.")
     @register_user
@@ -37,6 +141,8 @@ class Inventory(commands.Cog):
             f"Magic:    **{items.get('shield_magic', 0)}**",
             f"Aegis:    **{items.get('aegis', 0)}**",
             f"Stasis:   **{items.get('stasis', 0)}**",
+            "",
+            "_All shields auto-equip against incoming PvP — typed shields block matching damage first._",
         ]
         await interaction.response.send_message(
             embed=discord.Embed(
