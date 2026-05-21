@@ -113,7 +113,7 @@ The bot autoruns migrations on startup, so the first deploy seeds the DB.
 ## Commands at a glance
 
 - **Discovery:** `/menu` — personalized "what can I do right now" dashboard (now shows PVE camps, dead champs, world boss, ambient state, regional availability)
-- **Core:** `/profile` `/inventory` `/champions` `/shields` `/loadout` `/equip` `/unequip` `/lock` `/unlock`
+- **Core:** `/profile` `/inventory` `/shields` `/loadout` (unified: view + edit + collection) `/lock` `/unlock`
 - **Rolling:** `/roll` `/roll10` `/roll100` `/roll1000` `/redeem-fragment`
 - **Daily-loop:** `/daily` `/work` `/beg`
 - **PVE:** `/hunt-camp` (random encounter) · `/explore region:<choice>` · `/lore`
