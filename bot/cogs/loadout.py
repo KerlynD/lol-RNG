@@ -154,7 +154,7 @@ class LoadoutDashView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary, emoji="🛠")
+    @discord.ui.button(label="Edit", style=discord.ButtonStyle.primary, emoji="🛠️")
     async def edit_btn(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -306,7 +306,7 @@ class LoadoutEditView(discord.ui.View):
 
 class _BackToDashButton(discord.ui.Button):
     def __init__(self, parent_view: discord.ui.View):
-        super().__init__(label="Back", style=discord.ButtonStyle.secondary, emoji="←", row=4)
+        super().__init__(label="Back", style=discord.ButtonStyle.secondary, emoji="⬅️", row=4)
         self._parent_view_ref = parent_view
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -386,7 +386,7 @@ class CollectionView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary, emoji="←")
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary, emoji="⬅️")
     async def prev_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
@@ -397,7 +397,7 @@ class CollectionView(discord.ui.View):
         else:
             await interaction.response.defer()
 
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary, emoji="→")
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary, emoji="➡️")
     async def next_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
