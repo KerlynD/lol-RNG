@@ -99,9 +99,23 @@ The bot autoruns migrations on startup, so the first deploy seeds the DB.
 
 - [x] Repo scaffold
 - [x] Champion roster + schema
-- [ ] Rolling (multiplier rolls)
-- [ ] Loadout + leveling
-- [ ] Tier 1–7 actions
-- [ ] PvP combat
-- [ ] Trading
-- [ ] Prestige
+- [x] Rolling (multiplier rolls 1x / 10x / 100x / 1000x, fragment redemption)
+- [x] Loadout + leveling (3 → 5 slots, 30-min swap cooldown, synergies)
+- [x] Tier 1–7 actions (28 commands across all 7 tiers)
+- [x] PvP combat (best-of-3 multi-round skirmish, typed shields, 3/24h cap)
+- [x] Trading (1h expiry, flat 500 gold tax, locked champions)
+- [x] Prestige (Lv30 reset, +5% gold, Death-tier rate boost)
+
+## Commands at a glance
+
+- **Core:** `/profile` `/inventory` `/champions` `/shields` `/loadout` `/equip` `/unequip` `/lock` `/unlock`
+- **Rolling:** `/roll` `/roll10` `/roll100` `/roll1000` `/redeem-fragment`
+- **Daily-loop:** `/daily` `/work` `/beg`
+- **Yordle/region:** `/forage` `/tinker` `/patrol-demacia` `/meditate-ionia` `/hunt-shadowisles`
+- **PvP:** `/attack` `/duel` `/prank` `/raid-noxus` `/heist-piltover`
+- **Faction:** `/ascend` `/darkin-pact` `/defend-targon` `/void-touch`
+- **Legendary:** `/void-incursion` `/celestial-gaze` `/freljord-storm` `/judgment`
+- **God:** `/reshape-stars` `/world-ender` `/wander` `/portal`
+- **Death (Kindred):** `/reap` `/lambs-respite` `/eternal-hunt` `/spy` `/never-one-without-the-other`
+- **Trading:** `/trade` `/accept` `/decline` `/cancel` `/trades` `/trade-log`
+- **Endgame:** `/prestige`
