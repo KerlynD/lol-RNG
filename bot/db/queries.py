@@ -659,6 +659,40 @@ async def resolve_ambient_event(
     return val is not None
 
 
+# ----------------------------------------------------------------------------
+# Lore (PRD v2 Phase C)
+# ----------------------------------------------------------------------------
+
+
+async def unlock_lore(discord_id: int, lore_key: str) -> bool:
+    """Returns True if newly unlocked, False if already had it."""
+    val = await get_pool().fetchval(
+        """
+        INSERT INTO user_lore (user_id, lore_key) VALUES ($1, $2)
+        ON CONFLICT (user_id, lore_key) DO NOTHING
+        RETURNING 1
+        """,
+        discord_id, lore_key,
+    )
+    return val is not None
+
+
+async def list_lore(discord_id: int) -> list[tuple[str, datetime]]:
+    rows = await get_pool().fetch(
+        "SELECT lore_key, unlocked_at FROM user_lore WHERE user_id = $1 ORDER BY unlocked_at",
+        discord_id,
+    )
+    return [(r["lore_key"], r["unlocked_at"]) for r in rows]
+
+
+async def has_lore(discord_id: int, lore_key: str) -> bool:
+    val = await get_pool().fetchval(
+        "SELECT 1 FROM user_lore WHERE user_id = $1 AND lore_key = $2",
+        discord_id, lore_key,
+    )
+    return val is not None
+
+
 async def expire_pending_ambient_events() -> list[AmbientEvent]:
     rows = await get_pool().fetch(
         """

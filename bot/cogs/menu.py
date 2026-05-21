@@ -297,6 +297,44 @@ class Menu(commands.Cog):
                 inline=False,
             )
 
+        # ── Regional exploration ───────────────────────────────────────────
+        from bot.game.pve.encounters import regions_list
+        owned_regions = {e.champion.region for e in loadout if e.champion.region}
+        available_explore: list[str] = []
+        explore_locked_by_champ: list[str] = []
+        explore_on_cd: list[tuple[str, float]] = []
+        for region in regions_list():
+            cd_key = f"explore:{region.lower()}"
+            cd_remaining = cooldowns.get(cd_key)
+            if region not in owned_regions:
+                explore_locked_by_champ.append(region)
+            elif cd_remaining is not None:
+                explore_on_cd.append((region, cd_remaining))
+            else:
+                available_explore.append(region)
+
+        explore_lines: list[str] = []
+        if available_explore:
+            explore_lines.append(
+                "✅ Up: " + ", ".join(sorted(available_explore))
+            )
+        if explore_on_cd:
+            explore_on_cd.sort(key=lambda x: x[1])
+            cd_line = ", ".join(
+                f"{r} ({_format_seconds(s)})" for r, s in explore_on_cd[:4]
+            )
+            explore_lines.append("⏳ " + cd_line)
+        if not available_explore and not explore_on_cd and explore_locked_by_champ:
+            explore_lines.append(
+                "_Equip a champion from a region to /explore there._"
+            )
+        if explore_lines:
+            embed.add_field(
+                name="🗺 Runeterra",
+                value="\n".join(explore_lines),
+                inline=False,
+            )
+
         # ── Ambient encounter status ───────────────────────────────────────
         ambient_line = (
             "ON — ambient encounters may surprise you every ~20–40 min."
