@@ -1,0 +1,26 @@
+# Fly.io app config for lol-RNG.
+# Bot is outbound-only (Discord gateway websocket) — no HTTP service block.
+# After `fly launch --no-deploy`, attach Postgres:
+#   fly postgres create --name lol-rng-db
+#   fly postgres attach lol-rng-db
+# Then set secrets:
+#   fly secrets set DISCORD_TOKEN=... DISCORD_GUILD_ID=... DROP_WEIGHT_SEED=...
+# Deploy:
+#   fly deploy
+
+app = "lol-rng"
+primary_region = "iad"
+
+[build]
+
+[env]
+  LOG_LEVEL = "INFO"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[processes]
+  bot = "python -m bot.main"
