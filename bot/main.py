@@ -1,0 +1,59 @@
+from __future__ import annotations
+
+import asyncio
+import logging
+
+import discord
+from discord.ext import commands
+
+from bot.config import Settings
+from bot.db import migrate, pool
+
+log = logging.getLogger("lol-rng")
+
+
+class LolRngBot(commands.Bot):
+    def __init__(self, settings: Settings):
+        intents = discord.Intents.default()
+        intents.message_content = False
+        super().__init__(command_prefix="!", intents=intents)
+        self.settings = settings
+
+    async def setup_hook(self) -> None:
+        await pool.init_pool(self.settings.database_url)
+        await migrate.run(self.settings.drop_weight_seed)
+
+        await self.load_extension("bot.cogs.admin")
+
+        guild = discord.Object(id=self.settings.discord_guild_id)
+        self.tree.copy_global_to(guild=guild)
+        synced = await self.tree.sync(guild=guild)
+        log.info("Synced %d slash commands to guild %s", len(synced), self.settings.discord_guild_id)
+
+    async def close(self) -> None:
+        try:
+            await pool.close_pool()
+        finally:
+            await super().close()
+
+
+async def amain() -> None:
+    settings = Settings.load()
+    logging.basicConfig(
+        level=settings.log_level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    bot = LolRngBot(settings)
+    async with bot:
+        await bot.start(settings.discord_token)
+
+
+def main() -> None:
+    try:
+        asyncio.run(amain())
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
