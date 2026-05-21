@@ -419,6 +419,25 @@ async def check_cooldown(discord_id: int, action_key: str) -> float | None:
     return (available_at - now).total_seconds()
 
 
+async def get_all_cooldowns(discord_id: int) -> dict[str, float]:
+    """One round-trip fetch of every active cooldown for a user.
+
+    Returns {action_key: seconds_remaining}. Stale entries (already elapsed)
+    are filtered out.
+    """
+    rows = await get_pool().fetch(
+        "SELECT action_key, available_at FROM cooldowns WHERE user_id = $1",
+        discord_id,
+    )
+    now = datetime.now(tz=timezone.utc)
+    out: dict[str, float] = {}
+    for r in rows:
+        remaining = (r["available_at"] - now).total_seconds()
+        if remaining > 0:
+            out[r["action_key"]] = remaining
+    return out
+
+
 async def set_cooldown(
     discord_id: int,
     action_key: str,
