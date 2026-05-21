@@ -15,6 +15,7 @@ from bot.game.actions.runner import (
     LEVEL_LOCKED,
     LOADOUT_LOCKED,
     check_eligibility,
+    synergy_summary,
 )
 from bot.game.economy import ROLL_COSTS
 from bot.game.leveling import unlocks_for
@@ -121,19 +122,37 @@ class Menu(commands.Cog):
                 hunt_lines.append("✅ `/hunt-camp` ready — but you have no alive champion.")
         else:
             hunt_lines.append(f"⏳ Next hunt in **{_format_seconds(hunt_cd)}**.")
-        # Active buffs / souls
-        if inventory.get("red_buff", 0) > 0:
-            hunt_lines.append(f"🔴 Red Buff ×{inventory['red_buff']} — next fight +10% win.")
-        if inventory.get("blue_buff", 0) > 0:
-            hunt_lines.append(f"🔵 Blue Buff ×{inventory['blue_buff']} — next action skips cooldown.")
-        owned_souls = [
-            k.replace("dragon_soul_", "").title()
-            for k in inventory
-            if k.startswith("dragon_soul_") and inventory[k] > 0
-        ]
-        if owned_souls:
-            hunt_lines.append("🐉 Dragon Souls: " + ", ".join(sorted(owned_souls)))
+        # Buff status (dormant + primed)
+        red_d, red_p = inventory.get("red_buff", 0), inventory.get("red_buff_primed", 0)
+        blue_d, blue_p = inventory.get("blue_buff", 0), inventory.get("blue_buff_primed", 0)
+        if red_p:
+            hunt_lines.append(f"🔴 Red Buff PRIMED ×{red_p} — fires on next fight (+10%).")
+        elif red_d:
+            hunt_lines.append(f"🔴 Red Buff dormant ×{red_d} — prime via /inventory button.")
+        if blue_p:
+            hunt_lines.append(f"🔵 Blue Buff PRIMED ×{blue_p} — skips next action cooldown.")
+        elif blue_d:
+            hunt_lines.append(f"🔵 Blue Buff dormant ×{blue_d} — prime via /inventory button.")
+
+        # Active dragon souls (1h temp buffs with timers).
+        from bot.game.pve.souls import SOUL_EFFECT_DESC, active_souls
+        souls = await active_souls(user_id)
+        for soul_type, remaining in sorted(souls.items(), key=lambda kv: -kv[1]):
+            hunt_lines.append(
+                f"🐉 **{soul_type.title()} Soul** active — {SOUL_EFFECT_DESC[soul_type]} "
+                f"({_format_seconds(remaining)} left)"
+            )
+
         embed.add_field(name="🌲 PVE", value="\n".join(hunt_lines), inline=False)
+
+        # ── Synergy bonuses (active when loadout qualifies at L10+) ─────────
+        synergies = synergy_summary(loadout, user.level)
+        if synergies:
+            embed.add_field(
+                name="🤝 Synergies active",
+                value="\n".join(synergies),
+                inline=False,
+            )
 
         # ── Dead champions ──────────────────────────────────────────────────
         if dead_champs:

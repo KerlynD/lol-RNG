@@ -18,7 +18,6 @@ from bot.game.economy import (
     fragment_item_key,
 )
 from bot.game.rolling import (
-    VALID_MULTIPLIERS,
     pick_champion_in_tier,
     roll_champion,
 )
@@ -70,47 +69,32 @@ async def _resolve_pull(
             return champion, True, new_qty, None
 
 
-async def _do_roll(
-    interaction: discord.Interaction,
-    multiplier: int,
-) -> None:
+async def _do_single_roll(interaction: discord.Interaction) -> None:
+    """The classic /roll — one pull, spends a Roll Token if available, else Gold."""
     user_id = interaction.user.id
     user = await queries.get_user(user_id)
     if user is None:
         user = await queries.ensure_user(user_id)
 
     pool = get_pool()
-    cost = ROLL_COSTS[multiplier]
-    # 1x rolls accept a Roll Token in lieu of gold.
+    cost = ROLL_COSTS[1]
     used_token = False
-    if multiplier == 1:
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                used_token = await queries.consume_item(user_id, "roll_token", 1, conn=conn)
-                if not used_token:
-                    if user.gold < cost:
-                        await interaction.response.send_message(
-                            embed=failure_embed(
-                                f"Need {cost:,} Gold or 1 Roll Token. You have {user.gold:,} Gold."
-                            ),
-                            ephemeral=True,
-                        )
-                        return
-                    await queries.add_gold(user_id, -cost, conn=conn)
-    else:
-        if user.gold < cost:
-            await interaction.response.send_message(
-                embed=failure_embed(
-                    f"/roll{multiplier} costs {cost:,} Gold. You have {user.gold:,} Gold."
-                ),
-                ephemeral=True,
-            )
-            return
-        await queries.add_gold(user_id, -cost)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            used_token = await queries.consume_item(user_id, "roll_token", 1, conn=conn)
+            if not used_token:
+                if user.gold < cost:
+                    await interaction.response.send_message(
+                        embed=failure_embed(
+                            f"Need {cost:,} Gold or 1 Roll Token. You have {user.gold:,} Gold."
+                        ),
+                        ephemeral=True,
+                    )
+                    return
+                await queries.add_gold(user_id, -cost, conn=conn)
 
     grouped = await _champs_by_tier()
-    result = roll_champion(multiplier, grouped, prestige=user.prestige)
-
+    result = roll_champion(1, grouped, prestige=user.prestige)
     final_champ, was_dupe, frag_qty, reap_to = await _resolve_pull(user_id, result.champion)
 
     if reap_to is not None:
@@ -125,9 +109,126 @@ async def _do_roll(
     embed = pull_embed(final_champ, was_dupe=was_dupe, fragment_qty=frag_qty)
     if used_token:
         embed.set_footer(text="Spent 1 Roll Token")
-    elif multiplier > 1:
-        embed.set_footer(text=f"/roll{multiplier} — guaranteed tier shifted up")
     await interaction.response.send_message(embed=embed)
+
+
+async def _do_bulk_rolls(interaction: discord.Interaction, n: int) -> None:
+    """N independent pulls at base odds. Cost = N * base. Combined summary embed.
+
+    Each pull is fully independent — same probability table as /roll. Multipliers
+    no longer shift tier weights; they just buy you more pulls.
+    """
+    user_id = interaction.user.id
+    user = await queries.get_user(user_id)
+    if user is None:
+        user = await queries.ensure_user(user_id)
+
+    cost = ROLL_COSTS[1] * n
+    if user.gold < cost:
+        await interaction.response.send_message(
+            embed=failure_embed(
+                f"/roll{n} costs {cost:,} Gold ({n} × {ROLL_COSTS[1]:,}). You have {user.gold:,}."
+            ),
+            ephemeral=True,
+        )
+        return
+
+    # Defer because 100+ pulls can take a few seconds.
+    await interaction.response.defer()
+
+    await queries.add_gold(user_id, -cost)
+    grouped = await _champs_by_tier()
+
+    new_champs: list[Champion] = []
+    dupe_by_tier: dict[int, int] = {}
+    reaped: list[tuple[Champion, int]] = []   # (champ, caster_id)
+
+    rng = random.Random()
+    for _ in range(n):
+        result = roll_champion(1, grouped, prestige=user.prestige, rng=rng)
+        champ, was_dupe, _frag_qty, reap_to = await _resolve_pull(user_id, result.champion)
+        if reap_to is not None:
+            reaped.append((champ, reap_to))
+        elif was_dupe:
+            dupe_by_tier[champ.tier] = dupe_by_tier.get(champ.tier, 0) + 1
+        else:
+            new_champs.append(champ)
+
+    embed = _bulk_roll_summary_embed(n, cost, new_champs, dupe_by_tier, reaped)
+    await interaction.followup.send(embed=embed)
+
+
+def _bulk_roll_summary_embed(
+    n: int,
+    cost: int,
+    new_champs: list[Champion],
+    dupe_by_tier: dict[int, int],
+    reaped: list[tuple[Champion, int]],
+) -> discord.Embed:
+    # Color by best pull tier
+    best_tier = max(
+        (c.tier for c in new_champs),
+        default=max(dupe_by_tier.keys(), default=1),
+    )
+    embed = discord.Embed(
+        title=f"🎲 {n} Rolls",
+        description=f"Spent **{cost:,} Gold**",
+        color=_TIER_COLORS.get(best_tier, 0x607D8B),
+    )
+
+    if new_champs:
+        # Sort by tier desc, then name.
+        new_champs.sort(key=lambda c: (-c.tier, c.name))
+        lines: list[str] = []
+        for c in new_champs[:25]:
+            label = f"**{c.name}** (T{c.tier}{', ' + c.region if c.region else ''})"
+            if c.tier >= 6:
+                label += " 🌟"
+            lines.append("• " + label)
+        if len(new_champs) > 25:
+            lines.append(f"_…and {len(new_champs) - 25} more new pulls_")
+        embed.add_field(
+            name=f"✨ New champions ({len(new_champs)})",
+            value="\n".join(lines)[:1024],
+            inline=False,
+        )
+
+    if dupe_by_tier:
+        from bot.utils.embeds import TIER_NAME
+        lines = [
+            f"  {TIER_NAME[t]}: ×{q}"
+            for t, q in sorted(dupe_by_tier.items(), reverse=True)
+        ]
+        total_dupes = sum(dupe_by_tier.values())
+        embed.add_field(
+            name=f"🧩 Fragments earned ({total_dupes} dupes)",
+            value="\n".join(lines),
+            inline=False,
+        )
+
+    if reaped:
+        lines = [
+            f"  **{c.name}** (T{c.tier}) → <@{caster_id}>"
+            for c, caster_id in reaped[:5]
+        ]
+        if len(reaped) > 5:
+            lines.append(f"  _…and {len(reaped) - 5} more_")
+        embed.add_field(
+            name=f"💀 Reaped ({len(reaped)})",
+            value="\n".join(lines),
+            inline=False,
+        )
+
+    if not new_champs and not dupe_by_tier and not reaped:
+        embed.add_field(name="—", value="_Nothing? That shouldn't happen._", inline=False)
+
+    return embed
+
+
+_TIER_COLORS = {
+    1: 0x9E9E9E, 2: 0x4CAF50, 3: 0x2196F3, 4: 0x9C27B0,
+    5: 0xFFC107, 6: 0xFF5722, 7: 0x000000,
+}
 
 
 class Rolling(commands.Cog):
@@ -137,22 +238,22 @@ class Rolling(commands.Cog):
     @app_commands.command(name="roll", description="Roll a champion. Spends a Roll Token if you have one, else Gold.")
     @register_user
     async def roll(self, interaction: discord.Interaction) -> None:
-        await _do_roll(interaction, 1)
+        await _do_single_roll(interaction)
 
-    @app_commands.command(name="roll10", description="10x roll — shifted odds, ≥ Tier 2 guaranteed.")
+    @app_commands.command(name="roll10", description="10 rolls at base odds. Cost: 10× base.")
     @register_user
     async def roll10(self, interaction: discord.Interaction) -> None:
-        await _do_roll(interaction, 10)
+        await _do_bulk_rolls(interaction, 10)
 
-    @app_commands.command(name="roll100", description="100x roll — strong shift, ≥ Tier 3 guaranteed.")
+    @app_commands.command(name="roll100", description="100 rolls at base odds. Cost: 100× base.")
     @register_user
     async def roll100(self, interaction: discord.Interaction) -> None:
-        await _do_roll(interaction, 100)
+        await _do_bulk_rolls(interaction, 100)
 
-    @app_commands.command(name="roll1000", description="1000x roll — big shift, ≥ Tier 4 guaranteed.")
+    @app_commands.command(name="roll1000", description="1000 rolls at base odds. Cost: 1000× base. Big spender mode.")
     @register_user
     async def roll1000(self, interaction: discord.Interaction) -> None:
-        await _do_roll(interaction, 1000)
+        await _do_bulk_rolls(interaction, 1000)
 
     @app_commands.command(
         name="redeem-fragment",

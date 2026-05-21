@@ -15,7 +15,12 @@ from discord.ext import tasks
 
 from bot.cogs.ambient import AMBIENT_TTL, AmbientView
 from bot.db import queries
+from bot.game.combat import power_score
 from bot.game.pve.ambient import AmbientSpec, pick_ambient
+from bot.game.pve.combat import (
+    PVE_WIN_PCT_BY_DIFF,
+    WEAKNESS_BONUS_PCT,
+)
 
 log = logging.getLogger(__name__)
 
@@ -64,12 +69,36 @@ async def spawn_ambient_events() -> None:
                 ttl=AMBIENT_TTL,
             )
             view = AmbientView(event_id=event.id)
+
+            # Compute a win-% preview based on the target's best alive champion.
+            preview_lines = [
+                f"<@{target_id}> — {spec.flavor}",
+                "",
+                f"**{spec.name}** — Tier {spec.tier}"
+                + (f" · weak to {spec.weak_to}" if spec.weak_to else ""),
+            ]
+            try:
+                loadout = await queries.alive_loadout(target_id)
+                if loadout:
+                    lead = max((e.champion for e in loadout), key=power_score)
+                    diff = max(-4, min(4, lead.tier - spec.tier))
+                    win_pct = PVE_WIN_PCT_BY_DIFF[diff]
+                    if spec.weak_to and lead.damage_type == spec.weak_to:
+                        win_pct = min(99.0, win_pct + WEAKNESS_BONUS_PCT)
+                    preview_lines.append(
+                        f"Your best alive champion: **{lead.name}** (T{lead.tier}, {lead.damage_type})"
+                    )
+                    preview_lines.append(f"Estimated win chance: **{win_pct:.1f}%**")
+                else:
+                    preview_lines.append("_You have no alive champion — running is your only option._")
+            except Exception:
+                log.exception("Failed to compute ambient win preview")
+            preview_lines.append("")
+            preview_lines.append("Fight or run. You have 5 minutes to decide.")
+
             embed = discord.Embed(
                 title=f"⚔ {spec.name}",
-                description=(
-                    f"<@{target_id}> — {spec.flavor}\n\n"
-                    f"Fight or run. You have 5 minutes to decide."
-                ),
+                description="\n".join(preview_lines),
                 color=0xFFC107,
             )
             try:

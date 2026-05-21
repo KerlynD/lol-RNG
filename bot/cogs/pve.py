@@ -34,7 +34,6 @@ from bot.game.pve.encounters import (
 )
 from bot.game.pve.runner import (
     HUNT_CAMP_KEY,
-    run_camp_back_out,
     run_camp_engage,
 )
 from bot.utils.decorators import register_user
@@ -57,13 +56,25 @@ ENCOUNTER_TIMEOUT_SEC = 60
 
 
 class HuntEncounterView(discord.ui.View):
-    """Two-button view: Hunt! / Back out. Auto-back-out after 60s."""
+    """Two-button view: Hunt! / Back out. Auto-back-out after 60s.
 
-    def __init__(self, *, owner_id: int, camp: CampSpec, champ: "Champion | None"):
+    The hunt-camp cooldown is set at /hunt-camp invocation (not here) to block
+    spam. This view's job is purely to resolve the encounter outcome.
+    """
+
+    def __init__(
+        self,
+        *,
+        owner_id: int,
+        camp: CampSpec,
+        champ: "Champion | None",
+        cooldown_set: int,
+    ):
         super().__init__(timeout=float(ENCOUNTER_TIMEOUT_SEC))
         self.owner_id = owner_id
         self.camp = camp
         self.champ = champ
+        self.cooldown_set = cooldown_set
         self.message: discord.Message | None = None
         self.resolved = False
 
@@ -83,21 +94,17 @@ class HuntEncounterView(discord.ui.View):
     async def on_timeout(self) -> None:
         if self.resolved or self.champ is None:
             return
-        # Auto back-out
+        # Auto back-out — cooldown was set on /hunt-camp; nothing else to do.
         try:
-            user = await queries.get_user(self.owner_id)
-            if user:
-                cd = await run_camp_back_out(user, self.camp)
-                if self.message:
-                    await self.message.edit(
-                        embed=info_embed(
-                            f"⏱ You hesitated too long. {self.camp.name} fades into the brush. "
-                            f"Hunt cooldown: {cd}s."
-                        ),
-                        view=None,
-                    )
+            if self.message:
+                await self.message.edit(
+                    embed=info_embed(
+                        f"⏱ You hesitated too long. {self.camp.name} fades into the brush."
+                    ),
+                    view=None,
+                )
         except Exception:
-            log.exception("auto-back-out failed")
+            log.exception("auto-back-out edit failed")
 
     @discord.ui.button(label="Hunt!", style=discord.ButtonStyle.success, emoji="⚔")
     async def hunt(
@@ -130,11 +137,10 @@ class HuntEncounterView(discord.ui.View):
         for child in self.children:
             child.disabled = True  # type: ignore[attr-defined]
 
-        user = await queries.get_user(self.owner_id)
-        cd = await run_camp_back_out(user, self.camp)
+        # Cooldown is already set; no DB call needed on back-out.
         await interaction.response.edit_message(
             embed=info_embed(
-                f"🏃 You back away from {self.camp.name}. Hunt cooldown: {cd}s."
+                f"🏃 You back away from {self.camp.name}. Hunt cooldown: {self.cooldown_set}s."
             ),
             view=self,
         )
@@ -151,7 +157,7 @@ class PVE(commands.Cog):
     )
     @register_user
     async def hunt_camp(self, interaction: discord.Interaction) -> None:
-        # 1. Cooldown check
+        # 1. Cooldown check — blocks both spam-spawning AND post-resolve repeats.
         remaining = await queries.check_cooldown(interaction.user.id, HUNT_CAMP_KEY)
         if remaining is not None:
             await interaction.response.send_message(
@@ -163,20 +169,34 @@ class PVE(commands.Cog):
         rng = random.Random()
         camp = roll_encounter(rng=rng)
 
-        # 3. Pick the best alive champion (if any)
+        # 3. SET COOLDOWN IMMEDIATELY (before any further work).
+        # This is what prevents /hunt-camp spam — once you've spawned an
+        # encounter you can't spawn another until this cooldown elapses
+        # OR you engage/back-out (which won't shorten it).
+        cd = cooldown_seconds(camp, rng=rng)
+        # Cloud soul: -20% cooldowns.
+        from bot.game.pve.souls import cooldown_factor
+        cd = int(cd * await cooldown_factor(interaction.user.id))
+        cd = max(cd, 5)   # never below 5s
+        from datetime import timedelta
+        await queries.set_cooldown(
+            interaction.user.id, HUNT_CAMP_KEY, timedelta(seconds=cd)
+        )
+
+        # 4. Pick the best alive champion (if any)
         loadout = await queries.alive_loadout(interaction.user.id)
         champ = lead_champion(loadout)
 
-        # 4. Compute preview and post the encounter
+        # 5. Compute preview and post the encounter
         if champ is None:
             embed = encounter_embed(camp, None, 0.0)
             embed.description = (
                 f"{embed.description}\n\n"
                 "**All your champions are dead.** Check `/menu` for revive timers. "
-                "Backing out will still cost a cooldown."
+                "The hunt cooldown still applies."
             )
             view = HuntEncounterView(
-                owner_id=interaction.user.id, camp=camp, champ=None
+                owner_id=interaction.user.id, camp=camp, champ=None, cooldown_set=cd
             )
             await interaction.response.send_message(embed=embed, view=view)
             view.message = await interaction.original_response()
@@ -185,7 +205,7 @@ class PVE(commands.Cog):
         win_pct = preview_win_pct(champ, camp)
         embed = encounter_embed(camp, champ, win_pct)
         view = HuntEncounterView(
-            owner_id=interaction.user.id, camp=camp, champ=champ
+            owner_id=interaction.user.id, camp=camp, champ=champ, cooldown_set=cd
         )
         await interaction.response.send_message(embed=embed, view=view)
         view.message = await interaction.original_response()
