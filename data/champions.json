@@ -1,180 +1,1494 @@
 [
-  { "name": "Renata Glasc",  "tier": 1, "region": "Zaun",         "factions": ["Chem-Baron"],    "damage_type": "AP",     "splash_url": null },
-  { "name": "Seraphine",     "tier": 1, "region": "Piltover",     "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Caitlyn",       "tier": 1, "region": "Piltover",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Draven",        "tier": 1, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Gangplank",     "tier": 1, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Graves",        "tier": 1, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Jhin",          "tier": 1, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Jinx",          "tier": 1, "region": "Zaun",         "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Miss Fortune",  "tier": 1, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Quinn",         "tier": 1, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Sivir",         "tier": 1, "region": "Shurima",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Vayne",         "tier": 1, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Akshan",        "tier": 1, "region": "Shurima",      "factions": ["Sentinel"],      "damage_type": "AD",     "splash_url": null },
-
-  { "name": "Darius",        "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Fiora",         "tier": 2, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Garen",         "tier": 2, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Jarvan IV",     "tier": 2, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "K'Sante",       "tier": 2, "region": "Shurima",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Samira",        "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Sett",          "tier": 2, "region": "Ionia",        "factions": ["Vastayan"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Xin Zhao",      "tier": 2, "region": "Demacia",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Blitzcrank",    "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Camille",       "tier": 2, "region": "Piltover",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Dr. Mundo",     "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Ekko",          "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Heimerdinger",  "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Jayce",         "tier": 2, "region": "Piltover",     "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Orianna",       "tier": 2, "region": "Piltover",     "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Singed",        "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Urgot",         "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Vi",            "tier": 2, "region": "Piltover",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Viktor",        "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Warwick",       "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Zac",           "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Aphelios",      "tier": 2, "region": "Targon",       "factions": ["Lunari"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Ashe",          "tier": 2, "region": "Freljord",     "factions": ["Iceborn"],       "damage_type": "AD",     "splash_url": null },
-  { "name": "Lucian",        "tier": 2, "region": "Demacia",      "factions": ["Sentinel"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Riven",         "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Senna",         "tier": 2, "region": "Runeterra",    "factions": ["Sentinel"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Tryndamere",    "tier": 2, "region": "Freljord",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Akali",         "tier": 2, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Alistar",       "tier": 2, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Braum",         "tier": 2, "region": "Freljord",     "factions": ["Iceborn"],       "damage_type": "AP",     "splash_url": null },
-  { "name": "Briar",         "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Corki",         "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Fizz",          "tier": 2, "region": "Bilgewater",   "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Gragas",        "tier": 2, "region": "Freljord",     "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Kennen",        "tier": 2, "region": "Ionia",        "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Kled",          "tier": 2, "region": "Noxus",        "factions": ["Yordle"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Milio",         "tier": 2, "region": "Ixtal",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Nami",          "tier": 2, "region": "Bilgewater",   "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Nidalee",       "tier": 2, "region": "Ixtal",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Olaf",          "tier": 2, "region": "Freljord",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Rakan",         "tier": 2, "region": "Ionia",        "factions": ["Vastayan"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Rengar",        "tier": 2, "region": "Ixtal",        "factions": ["Vastayan"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Rumble",        "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Sejuani",       "tier": 2, "region": "Freljord",     "factions": ["Iceborn"],       "damage_type": "AP",     "splash_url": null },
-  { "name": "Smolder",       "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Sona",          "tier": 2, "region": "Demacia",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Teemo",         "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Tristana",      "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Twisted Fate",  "tier": 2, "region": "Bilgewater",   "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Twitch",        "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Xayah",         "tier": 2, "region": "Ionia",        "factions": ["Vastayan"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Yuumi",         "tier": 2, "region": "Bandle City",  "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Zeri",          "tier": 2, "region": "Zaun",         "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Ziggs",         "tier": 2, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Ezreal",        "tier": 2, "region": "Piltover",     "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Katarina",      "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Ambessa",       "tier": 2, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Yunara",        "tier": 2, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-
-  { "name": "Ahri",          "tier": 3, "region": "Ionia",        "factions": ["Vastayan"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Annie",         "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Cassiopeia",    "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Hwei",          "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Lulu",          "tier": 3, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Lux",           "tier": 3, "region": "Demacia",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Malzahar",      "tier": 3, "region": "Shurima",      "factions": ["Voidborn"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Neeko",         "tier": 3, "region": "Ixtal",        "factions": ["Vastayan"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Qiyana",        "tier": 3, "region": "Ixtal",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Swain",         "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Sylas",         "tier": 3, "region": "Demacia",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Taliyah",       "tier": 3, "region": "Shurima",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Veigar",        "tier": 3, "region": "Bandle City",  "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Vex",           "tier": 3, "region": "Shadow Isles", "factions": ["Yordle"],        "damage_type": "AP",     "splash_url": null },
-  { "name": "Zyra",          "tier": 3, "region": "Ixtal",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Gwen",          "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Irelia",        "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Jax",           "tier": 3, "region": "Runeterra",    "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Lee Sin",       "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Master Yi",     "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Rell",          "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Shen",          "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Udyr",          "tier": 3, "region": "Freljord",     "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Wukong",        "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Yasuo",         "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Yone",          "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Zed",           "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Amumu",         "tier": 3, "region": "Shurima",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Elise",         "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Gnar",          "tier": 3, "region": "Freljord",     "factions": ["Yordle"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Hecarim",       "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Illaoi",        "tier": 3, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Ivern",         "tier": 3, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Kai'Sa",        "tier": 3, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Kalista",       "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Kassadin",      "tier": 3, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Kha'Zix",       "tier": 3, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Kog'Maw",       "tier": 3, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Lillia",        "tier": 3, "region": "Ionia",        "factions": ["Vastayan"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Maokai",        "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Nautilus",      "tier": 3, "region": "Bilgewater",   "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Poppy",         "tier": 3, "region": "Demacia",      "factions": ["Yordle"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Pyke",          "tier": 3, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Rammus",        "tier": 3, "region": "Shurima",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Rek'Sai",       "tier": 3, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Shaco",         "tier": 3, "region": "Runeterra",    "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Shyvana",       "tier": 3, "region": "Demacia",      "factions": [],                "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Sion",          "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Skarner",       "tier": 3, "region": "Shurima",      "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Thresh",        "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Trundle",       "tier": 3, "region": "Freljord",     "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Yorick",        "tier": 3, "region": "Shadow Isles", "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Aurora",        "tier": 3, "region": "Freljord",     "factions": ["Vastayan"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Mel",           "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Nilah",         "tier": 3, "region": "Bilgewater",   "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Talon",         "tier": 3, "region": "Noxus",        "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Nunu & Willump","tier": 3, "region": "Freljord",     "factions": [],                "damage_type": "AP",     "splash_url": null },
-
-  { "name": "Azir",          "tier": 4, "region": "Shurima",      "factions": ["Ascended"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Naafiri",       "tier": 4, "region": "Shurima",      "factions": ["Darkin"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Nasus",         "tier": 4, "region": "Shurima",      "factions": ["Ascended"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Renekton",      "tier": 4, "region": "Shurima",      "factions": ["Ascended"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Varus",         "tier": 4, "region": "Ionia",        "factions": ["Darkin"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Xerath",        "tier": 4, "region": "Shurima",      "factions": ["Ascended"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Karthus",       "tier": 4, "region": "Shadow Isles", "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Mordekaiser",   "tier": 4, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Viego",         "tier": 4, "region": "Shadow Isles", "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Bel'Veth",      "tier": 4, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AD",     "splash_url": null },
-  { "name": "Cho'Gath",      "tier": 4, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Malphite",      "tier": 4, "region": "Ixtal",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Vel'Koz",       "tier": 4, "region": "Void",         "factions": ["Voidborn"],      "damage_type": "AP",     "splash_url": null },
-  { "name": "Brand",         "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Evelynn",       "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Galio",         "tier": 4, "region": "Demacia",      "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Kayn",          "tier": 4, "region": "Ionia",        "factions": ["Darkin"],        "damage_type": "AD",     "splash_url": null },
-  { "name": "Lissandra",     "tier": 4, "region": "Freljord",     "factions": ["Iceborn"],       "damage_type": "AP",     "splash_url": null },
-  { "name": "Nocturne",      "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AD",     "splash_url": null },
-  { "name": "Tahm Kench",    "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Zilean",        "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Syndra",        "tier": 4, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Ryze",          "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Vladimir",      "tier": 4, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Karma",         "tier": 4, "region": "Ionia",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "LeBlanc",       "tier": 4, "region": "Noxus",        "factions": [],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Zaheen",        "tier": 4, "region": "Runeterra",    "factions": [],                "damage_type": "AP",     "splash_url": null },
-
-  { "name": "Anivia",        "tier": 5, "region": "Freljord",     "factions": ["Iceborn"],                "damage_type": "AP",     "splash_url": null },
-  { "name": "Janna",         "tier": 5, "region": "Zaun",         "factions": [],                         "damage_type": "AP",     "splash_url": null },
-  { "name": "Ornn",          "tier": 5, "region": "Freljord",     "factions": [],                         "damage_type": "AP",     "splash_url": null },
-  { "name": "Volibear",      "tier": 5, "region": "Freljord",     "factions": [],                         "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Diana",         "tier": 5, "region": "Targon",       "factions": ["Aspect", "Lunari"],       "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Kayle",         "tier": 5, "region": "Demacia",      "factions": ["Aspect"],                 "damage_type": "Hybrid", "splash_url": null },
-  { "name": "Leona",         "tier": 5, "region": "Targon",       "factions": ["Aspect", "Solari"],       "damage_type": "AP",     "splash_url": null },
-  { "name": "Morgana",       "tier": 5, "region": "Demacia",      "factions": [],                         "damage_type": "AP",     "splash_url": null },
-  { "name": "Pantheon",      "tier": 5, "region": "Targon",       "factions": ["Aspect"],                 "damage_type": "AD",     "splash_url": null },
-  { "name": "Soraka",        "tier": 5, "region": "Targon",       "factions": ["Celestial"],              "damage_type": "AP",     "splash_url": null },
-  { "name": "Taric",         "tier": 5, "region": "Targon",       "factions": ["Aspect"],                 "damage_type": "AP",     "splash_url": null },
-  { "name": "Fiddlesticks",  "tier": 5, "region": "Runeterra",    "factions": [],                         "damage_type": "AP",     "splash_url": null },
-
-  { "name": "Aatrox",        "tier": 6, "region": "Runeterra",    "factions": ["Darkin"],                 "damage_type": "AD",     "splash_url": null },
-  { "name": "Aurelion Sol",  "tier": 6, "region": "Runeterra",    "factions": ["Celestial"],              "damage_type": "AP",     "splash_url": null },
-  { "name": "Bard",          "tier": 6, "region": "Runeterra",    "factions": ["Celestial"],              "damage_type": "AP",     "splash_url": null },
-  { "name": "Zoe",           "tier": 6, "region": "Targon",       "factions": ["Aspect"],                 "damage_type": "AP",     "splash_url": null },
-
-  { "name": "Kindred",       "tier": 7, "region": "Runeterra",    "factions": [],                         "damage_type": "AD",     "splash_url": null }
+  {
+    "name": "Renata Glasc",
+    "tier": 1,
+    "region": "Zaun",
+    "factions": [
+      "Chem-Baron"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Renata/splash-art/centered"
+  },
+  {
+    "name": "Seraphine",
+    "tier": 1,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Seraphine/splash-art/centered"
+  },
+  {
+    "name": "Caitlyn",
+    "tier": 1,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Caitlyn/splash-art/centered"
+  },
+  {
+    "name": "Draven",
+    "tier": 1,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Draven/splash-art/centered"
+  },
+  {
+    "name": "Gangplank",
+    "tier": 1,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Gangplank/splash-art/centered"
+  },
+  {
+    "name": "Graves",
+    "tier": 1,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Graves/splash-art/centered"
+  },
+  {
+    "name": "Jhin",
+    "tier": 1,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Jhin/splash-art/centered"
+  },
+  {
+    "name": "Jinx",
+    "tier": 1,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Jinx/splash-art/centered"
+  },
+  {
+    "name": "Miss Fortune",
+    "tier": 1,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/MissFortune/splash-art/centered"
+  },
+  {
+    "name": "Quinn",
+    "tier": 1,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Quinn/splash-art/centered"
+  },
+  {
+    "name": "Sivir",
+    "tier": 1,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sivir/splash-art/centered"
+  },
+  {
+    "name": "Vayne",
+    "tier": 1,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Vayne/splash-art/centered"
+  },
+  {
+    "name": "Akshan",
+    "tier": 1,
+    "region": "Shurima",
+    "factions": [
+      "Sentinel"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Akshan/splash-art/centered"
+  },
+  {
+    "name": "Darius",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Darius/splash-art/centered"
+  },
+  {
+    "name": "Fiora",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Fiora/splash-art/centered"
+  },
+  {
+    "name": "Garen",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Garen/splash-art/centered"
+  },
+  {
+    "name": "Jarvan IV",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/JarvanIV/splash-art/centered"
+  },
+  {
+    "name": "K'Sante",
+    "tier": 2,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/KSante/splash-art/centered"
+  },
+  {
+    "name": "Samira",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Samira/splash-art/centered"
+  },
+  {
+    "name": "Sett",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sett/splash-art/centered"
+  },
+  {
+    "name": "Xin Zhao",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/XinZhao/splash-art/centered"
+  },
+  {
+    "name": "Blitzcrank",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Blitzcrank/splash-art/centered"
+  },
+  {
+    "name": "Camille",
+    "tier": 2,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Camille/splash-art/centered"
+  },
+  {
+    "name": "Dr. Mundo",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/DrMundo/splash-art/centered"
+  },
+  {
+    "name": "Ekko",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ekko/splash-art/centered"
+  },
+  {
+    "name": "Heimerdinger",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Heimerdinger/splash-art/centered"
+  },
+  {
+    "name": "Jayce",
+    "tier": 2,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Jayce/splash-art/centered"
+  },
+  {
+    "name": "Orianna",
+    "tier": 2,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Orianna/splash-art/centered"
+  },
+  {
+    "name": "Singed",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Singed/splash-art/centered"
+  },
+  {
+    "name": "Urgot",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Urgot/splash-art/centered"
+  },
+  {
+    "name": "Vi",
+    "tier": 2,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Vi/splash-art/centered"
+  },
+  {
+    "name": "Viktor",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Viktor/splash-art/centered"
+  },
+  {
+    "name": "Warwick",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Warwick/splash-art/centered"
+  },
+  {
+    "name": "Zac",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zac/splash-art/centered"
+  },
+  {
+    "name": "Aphelios",
+    "tier": 2,
+    "region": "Targon",
+    "factions": [
+      "Lunari"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Aphelios/splash-art/centered"
+  },
+  {
+    "name": "Ashe",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [
+      "Iceborn"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ashe/splash-art/centered"
+  },
+  {
+    "name": "Lucian",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [
+      "Sentinel"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Lucian/splash-art/centered"
+  },
+  {
+    "name": "Riven",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Riven/splash-art/centered"
+  },
+  {
+    "name": "Senna",
+    "tier": 2,
+    "region": "Runeterra",
+    "factions": [
+      "Sentinel"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Senna/splash-art/centered"
+  },
+  {
+    "name": "Tryndamere",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Tryndamere/splash-art/centered"
+  },
+  {
+    "name": "Akali",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Akali/splash-art/centered"
+  },
+  {
+    "name": "Alistar",
+    "tier": 2,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Alistar/splash-art/centered"
+  },
+  {
+    "name": "Braum",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [
+      "Iceborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Braum/splash-art/centered"
+  },
+  {
+    "name": "Briar",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Briar/splash-art/centered"
+  },
+  {
+    "name": "Corki",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Corki/splash-art/centered"
+  },
+  {
+    "name": "Fizz",
+    "tier": 2,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Fizz/splash-art/centered"
+  },
+  {
+    "name": "Gragas",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Gragas/splash-art/centered"
+  },
+  {
+    "name": "Kennen",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kennen/splash-art/centered"
+  },
+  {
+    "name": "Kled",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kled/splash-art/centered"
+  },
+  {
+    "name": "Milio",
+    "tier": 2,
+    "region": "Ixtal",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Milio/splash-art/centered"
+  },
+  {
+    "name": "Nami",
+    "tier": 2,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nami/splash-art/centered"
+  },
+  {
+    "name": "Nidalee",
+    "tier": 2,
+    "region": "Ixtal",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nidalee/splash-art/centered"
+  },
+  {
+    "name": "Olaf",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Olaf/splash-art/centered"
+  },
+  {
+    "name": "Rakan",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Rakan/splash-art/centered"
+  },
+  {
+    "name": "Rengar",
+    "tier": 2,
+    "region": "Ixtal",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Rengar/splash-art/centered"
+  },
+  {
+    "name": "Rumble",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Rumble/splash-art/centered"
+  },
+  {
+    "name": "Sejuani",
+    "tier": 2,
+    "region": "Freljord",
+    "factions": [
+      "Iceborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sejuani/splash-art/centered"
+  },
+  {
+    "name": "Smolder",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Smolder/splash-art/centered"
+  },
+  {
+    "name": "Sona",
+    "tier": 2,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sona/splash-art/centered"
+  },
+  {
+    "name": "Teemo",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Teemo/splash-art/centered"
+  },
+  {
+    "name": "Tristana",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Tristana/splash-art/centered"
+  },
+  {
+    "name": "Twisted Fate",
+    "tier": 2,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/TwistedFate/splash-art/centered"
+  },
+  {
+    "name": "Twitch",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Twitch/splash-art/centered"
+  },
+  {
+    "name": "Xayah",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Xayah/splash-art/centered"
+  },
+  {
+    "name": "Yuumi",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Yuumi/splash-art/centered"
+  },
+  {
+    "name": "Zeri",
+    "tier": 2,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zeri/splash-art/centered"
+  },
+  {
+    "name": "Ziggs",
+    "tier": 2,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ziggs/splash-art/centered"
+  },
+  {
+    "name": "Ezreal",
+    "tier": 2,
+    "region": "Piltover",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ezreal/splash-art/centered"
+  },
+  {
+    "name": "Katarina",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Katarina/splash-art/centered"
+  },
+  {
+    "name": "Ambessa",
+    "tier": 2,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ambessa/splash-art/centered"
+  },
+  {
+    "name": "Yunara",
+    "tier": 2,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Yunara/splash-art/centered"
+  },
+  {
+    "name": "Ahri",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ahri/splash-art/centered"
+  },
+  {
+    "name": "Annie",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Annie/splash-art/centered"
+  },
+  {
+    "name": "Cassiopeia",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Cassiopeia/splash-art/centered"
+  },
+  {
+    "name": "Hwei",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Hwei/splash-art/centered"
+  },
+  {
+    "name": "Lulu",
+    "tier": 3,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Lulu/splash-art/centered"
+  },
+  {
+    "name": "Lux",
+    "tier": 3,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Lux/splash-art/centered"
+  },
+  {
+    "name": "Malzahar",
+    "tier": 3,
+    "region": "Shurima",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Malzahar/splash-art/centered"
+  },
+  {
+    "name": "Neeko",
+    "tier": 3,
+    "region": "Ixtal",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Neeko/splash-art/centered"
+  },
+  {
+    "name": "Qiyana",
+    "tier": 3,
+    "region": "Ixtal",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Qiyana/splash-art/centered"
+  },
+  {
+    "name": "Swain",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Swain/splash-art/centered"
+  },
+  {
+    "name": "Sylas",
+    "tier": 3,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sylas/splash-art/centered"
+  },
+  {
+    "name": "Taliyah",
+    "tier": 3,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Taliyah/splash-art/centered"
+  },
+  {
+    "name": "Veigar",
+    "tier": 3,
+    "region": "Bandle City",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Veigar/splash-art/centered"
+  },
+  {
+    "name": "Vex",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Vex/splash-art/centered"
+  },
+  {
+    "name": "Zyra",
+    "tier": 3,
+    "region": "Ixtal",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zyra/splash-art/centered"
+  },
+  {
+    "name": "Gwen",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Gwen/splash-art/centered"
+  },
+  {
+    "name": "Irelia",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Irelia/splash-art/centered"
+  },
+  {
+    "name": "Jax",
+    "tier": 3,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Jax/splash-art/centered"
+  },
+  {
+    "name": "Lee Sin",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/LeeSin/splash-art/centered"
+  },
+  {
+    "name": "Master Yi",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/MasterYi/splash-art/centered"
+  },
+  {
+    "name": "Rell",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Rell/splash-art/centered"
+  },
+  {
+    "name": "Shen",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Shen/splash-art/centered"
+  },
+  {
+    "name": "Udyr",
+    "tier": 3,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Udyr/splash-art/centered"
+  },
+  {
+    "name": "Wukong",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/MonkeyKing/splash-art/centered"
+  },
+  {
+    "name": "Yasuo",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Yasuo/splash-art/centered"
+  },
+  {
+    "name": "Yone",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Yone/splash-art/centered"
+  },
+  {
+    "name": "Zed",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zed/splash-art/centered"
+  },
+  {
+    "name": "Amumu",
+    "tier": 3,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Amumu/splash-art/centered"
+  },
+  {
+    "name": "Elise",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Elise/splash-art/centered"
+  },
+  {
+    "name": "Gnar",
+    "tier": 3,
+    "region": "Freljord",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Gnar/splash-art/centered"
+  },
+  {
+    "name": "Hecarim",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Hecarim/splash-art/centered"
+  },
+  {
+    "name": "Illaoi",
+    "tier": 3,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Illaoi/splash-art/centered"
+  },
+  {
+    "name": "Ivern",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ivern/splash-art/centered"
+  },
+  {
+    "name": "Kai'Sa",
+    "tier": 3,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kaisa/splash-art/centered"
+  },
+  {
+    "name": "Kalista",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kalista/splash-art/centered"
+  },
+  {
+    "name": "Kassadin",
+    "tier": 3,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kassadin/splash-art/centered"
+  },
+  {
+    "name": "Kha'Zix",
+    "tier": 3,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Khazix/splash-art/centered"
+  },
+  {
+    "name": "Kog'Maw",
+    "tier": 3,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/KogMaw/splash-art/centered"
+  },
+  {
+    "name": "Lillia",
+    "tier": 3,
+    "region": "Ionia",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Lillia/splash-art/centered"
+  },
+  {
+    "name": "Maokai",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Maokai/splash-art/centered"
+  },
+  {
+    "name": "Nautilus",
+    "tier": 3,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nautilus/splash-art/centered"
+  },
+  {
+    "name": "Poppy",
+    "tier": 3,
+    "region": "Demacia",
+    "factions": [
+      "Yordle"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Poppy/splash-art/centered"
+  },
+  {
+    "name": "Pyke",
+    "tier": 3,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Pyke/splash-art/centered"
+  },
+  {
+    "name": "Rammus",
+    "tier": 3,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Rammus/splash-art/centered"
+  },
+  {
+    "name": "Rek'Sai",
+    "tier": 3,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/RekSai/splash-art/centered"
+  },
+  {
+    "name": "Shaco",
+    "tier": 3,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Shaco/splash-art/centered"
+  },
+  {
+    "name": "Shyvana",
+    "tier": 3,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Shyvana/splash-art/centered"
+  },
+  {
+    "name": "Sion",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Sion/splash-art/centered"
+  },
+  {
+    "name": "Skarner",
+    "tier": 3,
+    "region": "Shurima",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Skarner/splash-art/centered"
+  },
+  {
+    "name": "Thresh",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Thresh/splash-art/centered"
+  },
+  {
+    "name": "Trundle",
+    "tier": 3,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Trundle/splash-art/centered"
+  },
+  {
+    "name": "Yorick",
+    "tier": 3,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Yorick/splash-art/centered"
+  },
+  {
+    "name": "Aurora",
+    "tier": 3,
+    "region": "Freljord",
+    "factions": [
+      "Vastayan"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Aurora/splash-art/centered"
+  },
+  {
+    "name": "Mel",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Mel/splash-art/centered"
+  },
+  {
+    "name": "Nilah",
+    "tier": 3,
+    "region": "Bilgewater",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nilah/splash-art/centered"
+  },
+  {
+    "name": "Talon",
+    "tier": 3,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Talon/splash-art/centered"
+  },
+  {
+    "name": "Nunu & Willump",
+    "tier": 3,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nunu/splash-art/centered"
+  },
+  {
+    "name": "Azir",
+    "tier": 4,
+    "region": "Shurima",
+    "factions": [
+      "Ascended"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Azir/splash-art/centered"
+  },
+  {
+    "name": "Naafiri",
+    "tier": 4,
+    "region": "Shurima",
+    "factions": [
+      "Darkin"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Naafiri/splash-art/centered"
+  },
+  {
+    "name": "Nasus",
+    "tier": 4,
+    "region": "Shurima",
+    "factions": [
+      "Ascended"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nasus/splash-art/centered"
+  },
+  {
+    "name": "Renekton",
+    "tier": 4,
+    "region": "Shurima",
+    "factions": [
+      "Ascended"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Renekton/splash-art/centered"
+  },
+  {
+    "name": "Varus",
+    "tier": 4,
+    "region": "Ionia",
+    "factions": [
+      "Darkin"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Varus/splash-art/centered"
+  },
+  {
+    "name": "Xerath",
+    "tier": 4,
+    "region": "Shurima",
+    "factions": [
+      "Ascended"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Xerath/splash-art/centered"
+  },
+  {
+    "name": "Karthus",
+    "tier": 4,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Karthus/splash-art/centered"
+  },
+  {
+    "name": "Mordekaiser",
+    "tier": 4,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Mordekaiser/splash-art/centered"
+  },
+  {
+    "name": "Viego",
+    "tier": 4,
+    "region": "Shadow Isles",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Viego/splash-art/centered"
+  },
+  {
+    "name": "Bel'Veth",
+    "tier": 4,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Belveth/splash-art/centered"
+  },
+  {
+    "name": "Cho'Gath",
+    "tier": 4,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Chogath/splash-art/centered"
+  },
+  {
+    "name": "Malphite",
+    "tier": 4,
+    "region": "Ixtal",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Malphite/splash-art/centered"
+  },
+  {
+    "name": "Vel'Koz",
+    "tier": 4,
+    "region": "Void",
+    "factions": [
+      "Voidborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Velkoz/splash-art/centered"
+  },
+  {
+    "name": "Brand",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Brand/splash-art/centered"
+  },
+  {
+    "name": "Evelynn",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Evelynn/splash-art/centered"
+  },
+  {
+    "name": "Galio",
+    "tier": 4,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Galio/splash-art/centered"
+  },
+  {
+    "name": "Kayn",
+    "tier": 4,
+    "region": "Ionia",
+    "factions": [
+      "Darkin"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kayn/splash-art/centered"
+  },
+  {
+    "name": "Lissandra",
+    "tier": 4,
+    "region": "Freljord",
+    "factions": [
+      "Iceborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Lissandra/splash-art/centered"
+  },
+  {
+    "name": "Nocturne",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Nocturne/splash-art/centered"
+  },
+  {
+    "name": "Tahm Kench",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/TahmKench/splash-art/centered"
+  },
+  {
+    "name": "Zilean",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zilean/splash-art/centered"
+  },
+  {
+    "name": "Syndra",
+    "tier": 4,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Syndra/splash-art/centered"
+  },
+  {
+    "name": "Ryze",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ryze/splash-art/centered"
+  },
+  {
+    "name": "Vladimir",
+    "tier": 4,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Vladimir/splash-art/centered"
+  },
+  {
+    "name": "Karma",
+    "tier": 4,
+    "region": "Ionia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Karma/splash-art/centered"
+  },
+  {
+    "name": "LeBlanc",
+    "tier": 4,
+    "region": "Noxus",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Leblanc/splash-art/centered"
+  },
+  {
+    "name": "Zaheen",
+    "tier": 4,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zaheen/splash-art/centered"
+  },
+  {
+    "name": "Anivia",
+    "tier": 5,
+    "region": "Freljord",
+    "factions": [
+      "Iceborn"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Anivia/splash-art/centered"
+  },
+  {
+    "name": "Janna",
+    "tier": 5,
+    "region": "Zaun",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Janna/splash-art/centered"
+  },
+  {
+    "name": "Ornn",
+    "tier": 5,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Ornn/splash-art/centered"
+  },
+  {
+    "name": "Volibear",
+    "tier": 5,
+    "region": "Freljord",
+    "factions": [],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Volibear/splash-art/centered"
+  },
+  {
+    "name": "Diana",
+    "tier": 5,
+    "region": "Targon",
+    "factions": [
+      "Aspect",
+      "Lunari"
+    ],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Diana/splash-art/centered"
+  },
+  {
+    "name": "Kayle",
+    "tier": 5,
+    "region": "Demacia",
+    "factions": [
+      "Aspect"
+    ],
+    "damage_type": "Hybrid",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kayle/splash-art/centered"
+  },
+  {
+    "name": "Leona",
+    "tier": 5,
+    "region": "Targon",
+    "factions": [
+      "Aspect",
+      "Solari"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Leona/splash-art/centered"
+  },
+  {
+    "name": "Morgana",
+    "tier": 5,
+    "region": "Demacia",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Morgana/splash-art/centered"
+  },
+  {
+    "name": "Pantheon",
+    "tier": 5,
+    "region": "Targon",
+    "factions": [
+      "Aspect"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Pantheon/splash-art/centered"
+  },
+  {
+    "name": "Soraka",
+    "tier": 5,
+    "region": "Targon",
+    "factions": [
+      "Celestial"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Soraka/splash-art/centered"
+  },
+  {
+    "name": "Taric",
+    "tier": 5,
+    "region": "Targon",
+    "factions": [
+      "Aspect"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Taric/splash-art/centered"
+  },
+  {
+    "name": "Fiddlesticks",
+    "tier": 5,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Fiddlesticks/splash-art/centered"
+  },
+  {
+    "name": "Aatrox",
+    "tier": 6,
+    "region": "Runeterra",
+    "factions": [
+      "Darkin"
+    ],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Aatrox/splash-art/centered"
+  },
+  {
+    "name": "Aurelion Sol",
+    "tier": 6,
+    "region": "Runeterra",
+    "factions": [
+      "Celestial"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/AurelionSol/splash-art/centered"
+  },
+  {
+    "name": "Bard",
+    "tier": 6,
+    "region": "Runeterra",
+    "factions": [
+      "Celestial"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Bard/splash-art/centered"
+  },
+  {
+    "name": "Zoe",
+    "tier": 6,
+    "region": "Targon",
+    "factions": [
+      "Aspect"
+    ],
+    "damage_type": "AP",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Zoe/splash-art/centered"
+  },
+  {
+    "name": "Kindred",
+    "tier": 7,
+    "region": "Runeterra",
+    "factions": [],
+    "damage_type": "AD",
+    "splash_url": "https://cdn.communitydragon.org/latest/champion/Kindred/splash-art/centered"
+  }
 ]

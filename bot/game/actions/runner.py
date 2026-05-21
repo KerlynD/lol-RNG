@@ -37,6 +37,7 @@ class ActionSuccess:
     drops: list[tuple[str, int]]      # (item_type, qty)
     leveled_up_to: int | None
     synergy_bonus_applied: bool
+    chosen_champion_name: str | None = None  # champion that performed the action
 
 
 # Eligibility status used by the /menu dashboard.
@@ -299,6 +300,7 @@ async def run_action(
         drops=drops,
         leveled_up_to=xp_result.leveled_up_to,
         synergy_bonus_applied=(synergy > 1.0),
+        chosen_champion_name=chosen_champ.name if chosen_champ else None,
     )
 
 

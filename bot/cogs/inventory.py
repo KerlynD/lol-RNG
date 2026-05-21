@@ -1,4 +1,4 @@
-"""Inventory cog — /inventory, /profile, /champions, /shields.
+"""Inventory cog — /inventory, /profile, /shields.
 
 The /inventory embed has Activate buttons for red_buff / blue_buff so
 players can prime them on demand before a big fight. Buffs are inert
@@ -14,8 +14,6 @@ from bot.db import queries
 from bot.db.pool import get_pool
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
-    TIER_COLOR,
-    TIER_NAME,
     inventory_embed,
     profile_embed,
 )
@@ -161,38 +159,7 @@ class Inventory(commands.Cog):
         embed.title = f"{interaction.user.display_name}'s profile"
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="champions", description="List the champions you own, grouped by tier.")
-    @register_user
-    async def champions(self, interaction: discord.Interaction) -> None:
-        owned = await queries.list_owned(interaction.user.id)
-        if not owned:
-            await interaction.response.send_message(
-                embed=discord.Embed(
-                    title="Collection",
-                    description="You haven't rolled any champions yet. Try `/roll`!",
-                    color=0x607D8B,
-                ),
-                ephemeral=True,
-            )
-            return
-
-        # Group by tier (already sorted by tier desc, name).
-        groups: dict[int, list[str]] = {}
-        for oc in owned:
-            lbl = oc.champion.name + (" 🔒" if oc.locked else "")
-            groups.setdefault(oc.champion.tier, []).append(lbl)
-
-        embed = discord.Embed(
-            title=f"Collection ({len(owned)} champions)",
-            color=0x3F51B5,
-        )
-        for tier in sorted(groups.keys(), reverse=True):
-            embed.add_field(
-                name=f"Tier {tier} — {TIER_NAME[tier]} ({len(groups[tier])})",
-                value=", ".join(groups[tier]) or "—",
-                inline=False,
-            )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    # /champions removed in v2.x — use `/loadout → 📚 Collection` instead.
 
 
 async def setup(bot: commands.Bot) -> None:

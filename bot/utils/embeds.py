@@ -69,16 +69,24 @@ def pull_embed(champion: Champion, was_dupe: bool, fragment_qty: int | None) -> 
             f"Region: {champion.region or '—'}\n"
             f"Damage Type: {champion.damage_type}\n"
         )
-        title = "New champion!"
+        title = "✨ New champion!"
     embed = discord.Embed(title=title, description=desc, color=TIER_COLOR[champion.tier])
     if champion.splash_url:
-        embed.set_thumbnail(url=champion.splash_url)
+        if was_dupe:
+            # Smaller thumbnail for dupes — less attention-grabbing.
+            from bot.utils.champion_images import tile_url
+            embed.set_thumbnail(url=tile_url(champion.name))
+        else:
+            # New pull: full splash, banner-style.
+            embed.set_image(url=champion.splash_url)
     return embed
 
 
 def action_result_embed(success: ActionSuccess) -> discord.Embed:
     spec = success.spec
     lines = [f"**{spec.name}** — {spec.description}"]
+    if success.chosen_champion_name:
+        lines.append(f"_Performed by_ **{success.chosen_champion_name}**")
     if success.gold_awarded:
         lines.append(f"Gold: **+{success.gold_awarded}**")
     if success.xp_awarded:
@@ -92,11 +100,15 @@ def action_result_embed(success: ActionSuccess) -> discord.Embed:
         lines.append("_Synergy bonus applied._")
     if success.leveled_up_to:
         lines.append(f":sparkles: **Level Up! → {success.leveled_up_to}** :sparkles:")
-    return discord.Embed(
+    embed = discord.Embed(
         title="Action complete",
         description="\n".join(lines),
         color=TIER_COLOR[spec.tier],
     )
+    if success.chosen_champion_name:
+        from bot.utils.champion_images import tile_url
+        embed.set_thumbnail(url=tile_url(success.chosen_champion_name))
+    return embed
 
 
 def cooldown_embed(action_name: str, seconds_remaining: float) -> discord.Embed:
@@ -174,29 +186,83 @@ def loadout_embed(entries: list[LoadoutEntry], cap: int) -> discord.Embed:
     return discord.Embed(title="Loadout", description=desc, color=0x3F51B5)
 
 
-def skirmish_embed(
+def skirmish_embeds(
     attacker: discord.abc.User,
     defender: discord.abc.User,
     result: SkirmishResult,
     gold_transferred: int,
-) -> discord.Embed:
+) -> list[discord.Embed]:
+    """Returns a list of 3 embeds rendering the skirmish:
+      [0] Match summary with rounds + winner
+      [1] Attacker card with lead champion icon
+      [2] Defender card with lead champion icon
+
+    Send via `await interaction.response.send_message(embeds=[...])`.
+    """
+    from bot.utils.champion_images import tile_url
+
+    color = 0x4CAF50 if result.attacker_won else 0xF44336
+
+    # Main summary embed
     lines: list[str] = []
     for i, r in enumerate(result.rounds, start=1):
         winner_label = attacker.display_name if r.attacker_won else defender.display_name
         lines.append(f"**Round {i}** — winner: **{winner_label}**\n{r.flavor}")
     winner = attacker if result.attacker_won else defender
-    color = 0x4CAF50 if result.attacker_won else 0xF44336
     final = (
         f"\n\n**{winner.display_name} wins!** "
         f"({result.rounds_won_by_attacker}–{result.rounds_won_by_defender})"
     )
     if gold_transferred:
         final += f"\nGold transferred: **{gold_transferred:,}**"
-    return discord.Embed(
+    summary = discord.Embed(
         title=f"⚔ {attacker.display_name} vs {defender.display_name}",
         description="\n\n".join(lines) + final,
         color=color,
     )
+
+    # Lead champions from round 1
+    lead_atk = result.rounds[0].attacker_champ if result.rounds else None
+    lead_def = result.rounds[0].defender_champ if result.rounds else None
+
+    atk_color = 0x4CAF50 if result.attacker_won else 0x9E9E9E
+    atk_embed = discord.Embed(
+        title=f"🛡 Attacker — {attacker.display_name}",
+        description=(
+            f"Lead: **{lead_atk.name}**\n"
+            f"T{lead_atk.tier} {lead_atk.damage_type}"
+            if lead_atk else "—"
+        ),
+        color=atk_color,
+    )
+    if lead_atk:
+        atk_embed.set_thumbnail(url=tile_url(lead_atk.name))
+
+    def_color = 0x4CAF50 if not result.attacker_won else 0x9E9E9E
+    def_embed = discord.Embed(
+        title=f"🛡 Defender — {defender.display_name}",
+        description=(
+            f"Lead: **{lead_def.name}**\n"
+            f"T{lead_def.tier} {lead_def.damage_type}"
+            if lead_def else "—"
+        ),
+        color=def_color,
+    )
+    if lead_def:
+        def_embed.set_thumbnail(url=tile_url(lead_def.name))
+
+    return [summary, atk_embed, def_embed]
+
+
+# Backwards-compat alias — old callers expect a single embed. Returns just
+# the summary so it still renders even without the new dual-icon look.
+def skirmish_embed(
+    attacker: discord.abc.User,
+    defender: discord.abc.User,
+    result: SkirmishResult,
+    gold_transferred: int,
+) -> discord.Embed:
+    return skirmish_embeds(attacker, defender, result, gold_transferred)[0]
 
 
 def trade_embed(trade: Trade, offered: Champion, requested: Champion) -> discord.Embed:
@@ -241,11 +307,15 @@ def encounter_embed(camp, champ, win_pct: float) -> discord.Embed:
             "",
             "Choose carefully — backing out *also* triggers the hunt cooldown.",
         ]
-    return discord.Embed(
+    embed = discord.Embed(
         title="A wild encounter!",
         description="\n".join(lines),
         color=tier_color,
     )
+    if champ is not None:
+        from bot.utils.champion_images import tile_url
+        embed.set_thumbnail(url=tile_url(champ.name))
+    return embed
 
 
 def world_boss_embed(boss, spec, top_strikers, you_dealt) -> discord.Embed:
@@ -300,7 +370,10 @@ def camp_result_embed(camp, champ, outcome) -> discord.Embed:
             f"**{champ.name}** is dead for **{fight.respawn_seconds // 60} min**.",
             f"_Hunt cooldown: {outcome.cooldown_seconds_set}s_",
         ]
-    return discord.Embed(title=title, description="\n".join(lines), color=color)
+    embed = discord.Embed(title=title, description="\n".join(lines), color=color)
+    from bot.utils.champion_images import tile_url
+    embed.set_thumbnail(url=tile_url(champ.name))
+    return embed
 
 
 # --- internals ---------------------------------------------------------------
