@@ -19,6 +19,12 @@ async def init_pool(database_url: str) -> asyncpg.Pool:
         min_size=1,
         max_size=10,
         command_timeout=30,
+        # Supabase + pgbouncer (transaction mode) rotates underlying
+        # connections between queries, which invalidates asyncpg's
+        # per-connection prepared statement cache. Disable the cache
+        # to avoid InvalidCachedStatementError. Minor perf hit; fine
+        # for a Discord bot.
+        statement_cache_size=0,
     )
     log.info("Postgres pool ready.")
     return _pool
