@@ -35,6 +35,7 @@ ITEM_LABELS: dict[str, str] = {
     "soul": "Soul",
     "corruption_stack": "Corruption Stack",
     "kindred_passive": "Kindred's Passive",
+    "revive_potion": "🧪 Revive Potion",
     "red_buff": "Red Buff (dormant)",
     "red_buff_primed": "🔴 Red Buff (PRIMED)",
     "blue_buff": "Blue Buff (dormant)",
@@ -156,7 +157,7 @@ def inventory_embed(items: dict[str, int]) -> discord.Embed:
         "Tokens": ["roll_token"],
         "Shields": ["shield_physical", "shield_magic", "aegis", "stasis"],
         "Fragments": [f"fragment_t{t}" for t in range(1, 7)],
-        "Materials": ["mat", "soul", "corruption_stack", "kindred_passive"],
+        "Materials": ["mat", "soul", "corruption_stack", "kindred_passive", "revive_potion"],
     }
     lines: list[str] = []
     for header, keys in groups.items():
@@ -365,6 +366,11 @@ def camp_result_embed(
             f"**{champ.name}** put down {camp.name}.",
             f"Gold: **+{outcome.gold_awarded:,}** · XP: **+{outcome.xp_awarded}**",
         ]
+        if outcome.champ_xp_awarded and outcome.lead_progress is not None:
+            lines.append(
+                f"⭐ {champ.name}: **+{outcome.champ_xp_awarded}** champ XP "
+                f"→ Champ Lv **{outcome.lead_progress.champ_level}**"
+            )
         if fight.drops:
             drop_text = ", ".join(
                 f"{ITEM_LABELS.get(t, t)} ×{q}" for t, q in fight.drops
@@ -859,6 +865,42 @@ def travel_embed(region_key: str, gold_spent: int) -> discord.Embed:
         ),
         color=0x3F51B5,
     )
+
+
+# --- Champion levels embeds --------------------------------------------------
+
+
+def _ability_pips(rank: int, cap: int) -> str:
+    return "🔵" * rank + "⚪" * (cap - rank)
+
+
+def champion_ability_embed(champion, progress, *, leveled_to: int | None = None) -> discord.Embed:
+    """Champion level / ability card — used by the level-up popup and /champion."""
+    from bot.utils.champion_images import tile_url
+
+    if leveled_to is not None:
+        title = f"🆙 {champion.name} reached Champion Level {leveled_to}!"
+    else:
+        title = f"⭐ {champion.name} — Champion Level {progress.champ_level}"
+    lines = [
+        f"**Champion Level:** {progress.champ_level} / 18",
+        f"**Unspent ability points:** {progress.unspent_points}",
+        "",
+        f"🇶 **Q**  {_ability_pips(progress.q_rank, 5)}",
+        f"🇼 **W**  {_ability_pips(progress.w_rank, 5)}",
+        f"🇪 **E**  {_ability_pips(progress.e_rank, 5)}",
+        f"🇷 **R**  {_ability_pips(progress.r_rank, 3)}  "
+        f"_(ranks at champ Lv 6 / 11 / 16)_",
+    ]
+    if progress.unspent_points > 0:
+        lines.append("\nSpend your point(s) with the buttons below.")
+    else:
+        lines.append("\n_No points to spend right now._")
+    embed = discord.Embed(
+        title=title, description="\n".join(lines), color=0x00BCD4
+    )
+    embed.set_thumbnail(url=tile_url(champion.name))
+    return embed
 
 
 # --- internals ---------------------------------------------------------------

@@ -8,20 +8,25 @@ from bot.db.queries import Champion
 from bot.game.combat import champion_stats, power_score
 from bot.game.pve.camps import CampSpec
 
-# Win probability by (champ_tier - camp_tier) — see PRD v2 plan.
+# Win probability by (champ_tier - camp_tier). Smoothed + symmetric around 50
+# (a +N advantage mirrors the -N disadvantage) — the old table was steep and
+# lopsided. Caps at 95 so weakness / red-buff / champ-level bonuses keep room.
 PVE_WIN_PCT_BY_DIFF: dict[int, float] = {
-    4: 99.0,
-    3: 97.0,
-    2: 90.0,
-    1: 75.0,
+    4: 95.0,
+    3: 88.0,
+    2: 78.0,
+    1: 65.0,
     0: 50.0,
-    -1: 15.0,
-    -2: 2.0,
-    -3: 0.5,
-    -4: 0.5,
+    -1: 35.0,
+    -2: 22.0,
+    -3: 12.0,
+    -4: 5.0,
 }
 
 WEAKNESS_BONUS_PCT = 10.0   # +10% to base win % when damage type matches weakness
+
+# Every camp has a small chance to drop a revive potion on a win.
+REVIVE_POTION_DROP_CHANCE = 0.02
 
 # Respawn duration scaled by tier deficit (more punishing for big mismatches).
 RESPAWN_DURATION_SEC: dict[int, int] = {
@@ -44,21 +49,28 @@ class CampFightResult:
 
 
 def preview_win_pct(
-    champ: Champion, camp: CampSpec, *, red_buff: bool = False
+    champ: Champion,
+    camp: CampSpec,
+    *,
+    red_buff: bool = False,
+    champ_bonus: float = 0.0,
 ) -> float:
     """The win % the player sees before deciding to engage.
 
-    If `red_buff` is True (player holds a `red_buff` item), the win % bumps by
-    another flat +10% (capped 99). The buff is only consumed on actual engage.
+    `champ_bonus` is the additive win-% from the champion's ability ranks
+    (see bot/game/champions/abilities.py) — passed in as a plain float so this
+    pure module never imports the progression layer. `red_buff` adds another
+    flat +10%. The result is clamped to [1.0, 99.0] — never a sure thing.
     """
     diff = champ.tier - camp.tier
     diff = max(-4, min(4, diff))
     base = PVE_WIN_PCT_BY_DIFF[diff]
     if camp.weak_to and champ.damage_type == camp.weak_to:
-        base = min(99.0, base + WEAKNESS_BONUS_PCT)
+        base += WEAKNESS_BONUS_PCT
     if red_buff:
-        base = min(99.0, base + WEAKNESS_BONUS_PCT)
-    return base
+        base += WEAKNESS_BONUS_PCT
+    base += champ_bonus
+    return max(1.0, min(99.0, base))
 
 
 def resolve_camp_fight(
@@ -66,10 +78,11 @@ def resolve_camp_fight(
     camp: CampSpec,
     *,
     red_buff: bool = False,
+    champ_bonus: float = 0.0,
     rng: random.Random | None = None,
 ) -> CampFightResult:
     rng = rng or random
-    win_pct = preview_win_pct(champ, camp, red_buff=red_buff)
+    win_pct = preview_win_pct(champ, camp, red_buff=red_buff, champ_bonus=champ_bonus)
     roll = rng.uniform(0.0, 100.0)
     won = roll < win_pct
 
@@ -78,6 +91,8 @@ def resolve_camp_fight(
         for item_type, prob in camp.drops:
             if prob >= 1.0 or rng.random() < prob:
                 drops.append((item_type, 1))
+        if rng.random() < REVIVE_POTION_DROP_CHANCE:
+            drops.append(("revive_potion", 1))
         return CampFightResult(
             won=True,
             win_pct=win_pct,
@@ -99,8 +114,11 @@ def resolve_camp_fight(
     )
 
 
-def lead_champion(loadout) -> Champion | None:
-    """Return the highest-Power champ from the supplied loadout, or None."""
+def lead_champion(loadout):
+    """Return the highest-Power LoadoutEntry from the loadout, or None.
+
+    Returns the entry (not a bare Champion) so the caller keeps `.progress`
+    for the champion-level win bonus."""
     if not loadout:
         return None
-    return max((e.champion for e in loadout), key=power_score)
+    return max(loadout, key=lambda e: power_score(e.champion))

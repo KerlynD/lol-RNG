@@ -13,7 +13,7 @@ from __future__ import annotations
 import random
 from typing import TYPE_CHECKING
 
-from bot.game.pve.camps import CampSpec
+from bot.game.pve.camps import CAMPS, CampSpec
 
 if TYPE_CHECKING:
     from bot.db.queries import Champion
@@ -196,6 +196,29 @@ REGION_POOLS: dict[str, tuple[float, list[tuple[CampSpec, float]]]] = {
     )
     for region_key, (wild_chance, rows) in _REGION_DATA.items()
 }
+
+
+# Buff camps + elemental drakes — rare jackpot encounters. They reuse the
+# legacy CampSpecs from camps.py (Red/Blue Brambleback drop red/blue buff;
+# drakes drop a dragon soul). Kept out of v3 region pools by the v3 rewrite —
+# re-seeded here into thematically-fitting regions at low weight.
+_SPECIAL_PLACEMENTS: dict[str, list[tuple[str, float]]] = {
+    "freljord": [("red_brambleback", 2.0)],
+    "ionia": [("blue_sentinel", 2.0)],
+    "piltover_zaun": [("blue_sentinel", 2.0)],
+    "ixtal": [
+        ("red_brambleback", 1.5),
+        ("drake_cloud", 0.5), ("drake_ocean", 0.5), ("drake_mountain", 0.5),
+    ],
+    "shurima": [
+        ("drake_infernal", 0.5), ("drake_chemtech", 0.5), ("drake_hextech", 0.5),
+    ],
+}
+
+for _region_key, _specials in _SPECIAL_PLACEMENTS.items():
+    _camps = REGION_POOLS[_region_key][1]
+    for _camp_key, _weight in _specials:
+        _camps.append((CAMPS[_camp_key], _weight))
 
 
 def wild_champ_chance(region_key: str) -> float:

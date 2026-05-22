@@ -10,6 +10,8 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
+from bot.game.champions.leveling import HUNT_PASSIVE_SHARE, WORLDBOSS_STRIKE_XP
+from bot.game.champions.xp import award_champ_xp
 from bot.game.combat import power_score
 from bot.game.pve.world_bosses import (
     CONFIG_BOSS_CHANNEL,
@@ -89,6 +91,16 @@ class WorldBossCog(commands.Cog):
 
         await queries.set_strike_cooldown(interaction.user.id, boss.id, STRIKE_COOLDOWN)
 
+        # World bosses are a top champ-XP source — every strike feeds the loadout.
+        levelups = await award_champ_xp(
+            interaction.user.id, loadout, lead.id,
+            WORLDBOSS_STRIKE_XP, HUNT_PASSIVE_SHARE,
+        )
+        levelup_note = ""
+        if levelups:
+            names = ", ".join(lu.champion.name for lu in levelups)
+            levelup_note = f"\n🆙 **{names}** levelled up — spend points with `/champion`."
+
         spec = WORLD_BOSSES.get(boss.boss_key)
         boss_name = spec.name if spec else boss.boss_key
         if defeated:
@@ -97,7 +109,7 @@ class WorldBossCog(commands.Cog):
             await interaction.response.send_message(
                 embed=info_embed(
                     f"⚔ **{lead.name}** strikes {boss_name} for **{base_damage:,}** damage. "
-                    f"HP remaining: **{new_hp:,} / {boss.hp_total:,}**."
+                    f"HP remaining: **{new_hp:,} / {boss.hp_total:,}**.{levelup_note}"
                 )
             )
 

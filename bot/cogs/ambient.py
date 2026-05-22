@@ -14,6 +14,9 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
+from bot.game.champions.abilities import progress_win_bonus
+from bot.game.champions.leveling import AMBIENT_WIN_XP, EXPLORE_PASSIVE_SHARE
+from bot.game.champions.xp import award_champ_xp
 from bot.game.combat import power_score
 from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
@@ -115,13 +118,16 @@ async def _resolve_ambient(interaction: discord.Interaction, *, fled: bool) -> N
         )
         return
 
-    lead = max((e.champion for e in loadout), key=power_score)
+    lead_entry = max(loadout, key=lambda e: power_score(e.champion))
+    lead = lead_entry.champion
 
-    # Same tier-diff win curve as camp combat
+    # Same tier-diff win curve as camp combat, plus the champ ability bonus.
     diff = max(-4, min(4, lead.tier - spec.tier))
     win_pct = PVE_WIN_PCT_BY_DIFF[diff]
     if spec.weak_to and lead.damage_type == spec.weak_to:
-        win_pct = min(99.0, win_pct + WEAKNESS_BONUS_PCT)
+        win_pct += WEAKNESS_BONUS_PCT
+    win_pct += progress_win_bonus(lead_entry.progress)
+    win_pct = max(1.0, min(99.0, win_pct))
     rng = random.Random()
     won = rng.uniform(0, 100) < win_pct
 
@@ -131,6 +137,13 @@ async def _resolve_ambient(interaction: discord.Interaction, *, fled: bool) -> N
         await queries.add_gold(user.discord_id, gold_reward)
         await queries.set_user_level_xp(user.discord_id, xp_result.new_level, xp_result.new_xp)
         await queries.resolve_ambient_event(event_id, "won", gold_reward, spec.base_xp)
+        levelups = await award_champ_xp(
+            user.discord_id, loadout, lead.id, AMBIENT_WIN_XP, EXPLORE_PASSIVE_SHARE
+        )
+        champ_line = ""
+        if levelups:
+            names = ", ".join(lu.champion.name for lu in levelups)
+            champ_line = f"\n🆙 **{names}** levelled up — see `/champion`."
         await interaction.response.edit_message(
             embed=discord.Embed(
                 title=f"⚔ Victory — {spec.name}",
@@ -138,6 +151,7 @@ async def _resolve_ambient(interaction: discord.Interaction, *, fled: bool) -> N
                     f"**{lead.name}** dispatches the {spec.name}.\n"
                     f"Gold: **+{gold_reward:,}** · XP: **+{spec.base_xp}**"
                     + (f"\n:sparkles: **Level up → {xp_result.leveled_up_to}**" if xp_result.leveled_up_to else "")
+                    + champ_line
                 ),
                 color=0x4CAF50,
             ),

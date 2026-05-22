@@ -48,3 +48,16 @@ def tile_url(name: str) -> str:
 def splash_url(name: str) -> str:
     """Centered card-style splash, smaller than full splash."""
     return f"https://cdn.communitydragon.org/latest/champion/{riot_id(name)}/splash-art/centered"
+
+
+def ability_icon_url(name: str, slot: str) -> str:
+    """Ability icon for a champion's Q/W/E/R (or P passive).
+
+    NOTE: the Community Dragon `ability-icon` path is best-effort — if it 404s
+    the level-up UI still works (buttons use letter emoji, the icon is only an
+    embed thumbnail). Verify against live champions; see plan TODO.
+    """
+    return (
+        f"https://cdn.communitydragon.org/latest/champion/"
+        f"{riot_id(name)}/ability-icon/{slot.lower()}"
+    )

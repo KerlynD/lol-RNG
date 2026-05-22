@@ -14,9 +14,70 @@ from bot.db import queries
 from bot.db.pool import get_pool
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
+    failure_embed,
+    info_embed,
     inventory_embed,
     profile_embed,
 )
+
+
+def _fmt_revive(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 60}m {s % 60}s" if s >= 60 else f"{s}s"
+
+
+class _ReviveSelect(discord.ui.Select):
+    def __init__(self, owner_id: int, dead: list[tuple[int, str, float]]):
+        self.owner_id = owner_id
+        self._names = {str(cid): name for cid, name, _ in dead}
+        options = [
+            discord.SelectOption(
+                label=name[:100],
+                value=str(cid),
+                description=f"Revives in {_fmt_revive(secs)}"[:100],
+            )
+            for cid, name, secs in dead[:25]
+        ]
+        super().__init__(
+            placeholder="Pick a champion to revive…",
+            options=options, min_values=1, max_values=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        champ_id = int(self.values[0])
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                ok = await queries.consume_item(
+                    self.owner_id, "revive_potion", 1, conn=conn
+                )
+                if not ok:
+                    await interaction.response.edit_message(
+                        embed=failure_embed("You have no revive potions left."),
+                        view=None,
+                    )
+                    return
+                await queries.revive_champion(self.owner_id, champ_id, conn=conn)
+        name = self._names.get(self.values[0], "Your champion")
+        await interaction.response.edit_message(
+            embed=info_embed(f"🧪 **{name}** is revived and ready to fight again!"),
+            view=None,
+        )
+
+
+class ReviveSelectView(discord.ui.View):
+    def __init__(self, owner_id: int, dead: list[tuple[int, str, float]]):
+        super().__init__(timeout=120.0)
+        self.owner_id = owner_id
+        self.add_item(_ReviveSelect(owner_id, dead))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "This isn't your inventory.", ephemeral=True
+            )
+            return False
+        return True
 
 
 class InventoryView(discord.ui.View):
@@ -42,6 +103,12 @@ class InventoryView(discord.ui.View):
             f"Prime Blue Buff ({blue_dormant})" if blue_dormant else "No Blue Buff"
         )
         self.activate_blue.disabled = blue_dormant <= 0
+
+        revive = inventory.get("revive_potion", 0)
+        self.use_revive.label = (
+            f"Use Revive Potion ({revive})" if revive else "No Revive Potion"
+        )
+        self.use_revive.disabled = revive <= 0
 
         # Show primed state as labels on disabled "info" buttons would be too
         # noisy. We surface the primed count in the embed itself.
@@ -93,6 +160,31 @@ class InventoryView(discord.ui.View):
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await self._activate(interaction, "blue_buff", "blue_buff_primed")
+
+    @discord.ui.button(
+        label="Use Revive Potion", style=discord.ButtonStyle.success, emoji="🧪"
+    )
+    async def use_revive(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        qty = (await queries.get_inventory(self.owner_id)).get("revive_potion", 0)
+        if qty <= 0:
+            await interaction.response.send_message(
+                embed=failure_embed("You have no revive potions."), ephemeral=True
+            )
+            return
+        dead = await queries.dead_champions_for_user(self.owner_id)
+        if not dead:
+            await interaction.response.send_message(
+                embed=info_embed("None of your loadout champions are dead."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(
+            embed=info_embed("Pick a champion to bring back to life:"),
+            view=ReviveSelectView(self.owner_id, dead),
+            ephemeral=True,
+        )
 
 
 class Inventory(commands.Cog):
