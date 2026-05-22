@@ -16,7 +16,15 @@ from discord.ext import commands
 
 from bot.db import queries
 from bot.db.pool import get_pool
+from bot.game.actions.registry import ACTIONS
+from bot.game.actions.runner import (
+    ELIGIBLE,
+    ActionFailure,
+    check_eligibility,
+    run_action,
+)
 from bot.game.leveling import apply_xp
+from bot.game.world.explore import EXPLORE_COOLDOWN, run_explore
 from bot.game.world.goals import all_goals_met, evaluate_goals
 from bot.game.world.quests import quest_current, quests_for_region
 from bot.game.world.regions import (
@@ -28,12 +36,15 @@ from bot.game.world.regions import (
 )
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
+    action_result_embed,
     adventure_hub_embed,
     adventure_welcome_embed,
+    cooldown_embed,
     failure_embed,
     info_embed,
     quest_complete_embed,
     quest_panel_embed,
+    region_actions_embed,
     region_arrival_embed,
     travel_embed,
 )
@@ -42,6 +53,30 @@ log = logging.getLogger(__name__)
 
 TRAVEL_CD_KEY = "_travel"
 HUB_TIMEOUT_SEC = 180
+
+# Region/faction solo actions folded out of slash commands into /adventure.
+REGION_ACTION_KEYS: dict[str, tuple[str, ...]] = {
+    "bandle_city": ("forage",),
+    "demacia": ("patrol-demacia",),
+    "freljord": ("freljord-storm",),
+    "ionia": ("meditate-ionia",),
+    "piltover_zaun": ("tinker",),
+    "shadow_isles": ("hunt-shadowisles",),
+    "shurima": ("ascend", "darkin-pact"),
+    "targon": ("defend-targon", "celestial-gaze", "judgment"),
+    "void": ("void-touch", "void-incursion"),
+}
+# PvP raids surfaced in the hub but kept as slash commands (they need @target).
+REGION_PVP_ACTIONS: dict[str, tuple[str, ...]] = {
+    "piltover_zaun": ("heist-piltover",),
+    "noxus": ("raid-noxus",),
+}
+
+
+def _region_has_actions(region_key: str) -> bool:
+    return bool(
+        REGION_ACTION_KEYS.get(region_key) or REGION_PVP_ACTIONS.get(region_key)
+    )
 
 
 # ── Goal / destination helpers ───────────────────────────────────────────────
@@ -112,9 +147,10 @@ async def _hub_view_and_embed(uid: int):
     goals = await _neighbor_goal_map(user, unlocked)
     travel_cd = await queries.check_cooldown(uid, TRAVEL_CD_KEY)
     has_quests = bool(quests_for_region(user.current_region or ""))
+    has_actions = _region_has_actions(user.current_region or "")
     destinations = [] if travel_cd else await _destination_options(user, unlocked)
     embed = adventure_hub_embed(user, unlocked, goals, travel_cd)
-    return embed, AdventureHubView(uid, destinations, has_quests)
+    return embed, AdventureHubView(uid, destinations, has_quests, has_actions)
 
 
 # ── Travel ───────────────────────────────────────────────────────────────────
@@ -246,6 +282,67 @@ async def _claim_quest(interaction: discord.Interaction, uid: int, quest) -> Non
     )
 
 
+# ── Explore + Region Actions ─────────────────────────────────────────────────
+
+
+async def _do_explore(interaction: discord.Interaction) -> None:
+    uid = interaction.user.id
+    user = await queries.get_user(uid)
+    region = get_region(user.current_region)
+    if region is None:
+        await interaction.response.edit_message(
+            embed=failure_embed("You have no region to explore."), view=None
+        )
+        return
+    cd_key = f"explore:{region.key}"
+    cd = await queries.check_cooldown(uid, cd_key)
+    if cd is not None:
+        await interaction.response.edit_message(
+            embed=cooldown_embed(f"Explore {region.display}", cd),
+            view=_BackToHubView(uid),
+        )
+        return
+    await queries.set_cooldown(uid, cd_key, EXPLORE_COOLDOWN)
+    result = await run_explore(user, region.key)
+    embed = discord.Embed(
+        title=f"🔭 {result.title}",
+        description=result.description,
+        color=result.color,
+    )
+    await interaction.response.edit_message(embed=embed, view=_BackToHubView(uid))
+
+
+async def _render_action_panel(interaction: discord.Interaction, uid: int) -> None:
+    user = await queries.get_user(uid)
+    region_key = user.current_region or ""
+    loadout = await queries.alive_loadout(uid)
+    cooldowns = await queries.get_all_cooldowns(uid)
+    solo = REGION_ACTION_KEYS.get(region_key, ())
+    pvp = REGION_PVP_ACTIONS.get(region_key, ())
+    avails = [
+        check_eligibility(ACTIONS[k], user.level, loadout, cooldowns) for k in solo
+    ]
+    await interaction.response.edit_message(
+        embed=region_actions_embed(region_key, avails, list(pvp)),
+        view=RegionActionView(uid, avails),
+    )
+
+
+async def _run_region_action(
+    interaction: discord.Interaction, uid: int, action_key: str
+) -> None:
+    user = await queries.get_user(uid)
+    result = await run_action(user, action_key)
+    if isinstance(result, ActionFailure):
+        if result.seconds_remaining is not None:
+            embed = cooldown_embed(ACTIONS[action_key].name, result.seconds_remaining)
+        else:
+            embed = failure_embed(result.reason)
+    else:
+        embed = action_result_embed(result)
+    await interaction.response.edit_message(embed=embed, view=_BackToHubView(uid))
+
+
 # ── Views ────────────────────────────────────────────────────────────────────
 
 
@@ -277,24 +374,48 @@ class _TravelSelect(discord.ui.Select):
         await _do_travel(interaction, self.values[0])
 
 
+class _BackToHubView(_OwnedView):
+    @discord.ui.button(label="Back to Adventure", emoji="⬅️", style=discord.ButtonStyle.secondary)
+    async def back(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        embed, view = await _hub_view_and_embed(self.owner_id)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
 class AdventureHubView(_OwnedView):
     def __init__(
         self,
         owner_id: int,
         destinations: list[tuple[str, str, str]],
         has_quests: bool,
+        has_actions: bool,
     ):
         super().__init__(owner_id)
         if destinations:
             self.add_item(_TravelSelect(destinations))
         if not has_quests:
             self.quests_button.disabled = True
+        if not has_actions:
+            self.actions_button.disabled = True
 
     @discord.ui.button(label="Quests", emoji="📜", style=discord.ButtonStyle.primary)
     async def quests_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
         await _render_quest_panel(interaction, self.owner_id)
+
+    @discord.ui.button(label="Explore", emoji="🔭", style=discord.ButtonStyle.primary)
+    async def explore_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await _do_explore(interaction)
+
+    @discord.ui.button(label="Region Actions", emoji="⚔️", style=discord.ButtonStyle.primary)
+    async def actions_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        await _render_action_panel(interaction, self.owner_id)
 
 
 class _QuestButton(discord.ui.Button):
@@ -332,6 +453,34 @@ class QuestPanelView(_OwnedView):
         super().__init__(owner_id)
         for quest, status, current, target in quest_states:
             self.add_item(_QuestButton(quest, status, current, target))
+
+    @discord.ui.button(label="Back", emoji="⬅️", style=discord.ButtonStyle.secondary, row=4)
+    async def back_button(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ) -> None:
+        embed, view = await _hub_view_and_embed(self.owner_id)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class _ActionButton(discord.ui.Button):
+    def __init__(self, avail):
+        self.action_key = avail.spec.key
+        eligible = avail.status == ELIGIBLE
+        super().__init__(
+            label=avail.spec.name[:80],
+            style=discord.ButtonStyle.success if eligible else discord.ButtonStyle.secondary,
+            disabled=not eligible,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _run_region_action(interaction, interaction.user.id, self.action_key)
+
+
+class RegionActionView(_OwnedView):
+    def __init__(self, owner_id: int, avails: list):
+        super().__init__(owner_id)
+        for avail in avails:
+            self.add_item(_ActionButton(avail))
 
     @discord.ui.button(label="Back", emoji="⬅️", style=discord.ButtonStyle.secondary, row=4)
     async def back_button(

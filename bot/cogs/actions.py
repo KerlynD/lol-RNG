@@ -1,7 +1,14 @@
-"""Actions cog — every PRD action command, wired through the registry runner.
+"""Actions cog — the global economy commands + PvP-triggering region raids.
 
-Single command per action key; PvP-triggering actions also resolve a skirmish
-via bot.game.pvp_flow.
+v3 folded the region/faction solo actions (forage, tinker, patrol-demacia,
+ascend, …) into the /adventure → Region Actions panel to cut command bloat.
+What remains here:
+
+- Global economy floor: /work, /beg, /daily (no region requirement).
+- PvP-triggering region raids: /prank, /duel, /heist-piltover, /raid-noxus —
+  these need an @target, so they stay slash commands rather than buttons.
+
+All still flow through bot/game/actions/runner.run_action.
 """
 from __future__ import annotations
 
@@ -12,7 +19,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
-from bot.game.actions.registry import ACTIONS, ActionSpec
+from bot.game.actions.registry import ACTIONS
 from bot.game.actions.runner import ActionFailure, ActionSuccess, run_action
 from bot.game.pvp_flow import attempt_pvp, check_pvp_eligibility
 from bot.utils.decorators import register_user
@@ -24,21 +31,6 @@ from bot.utils.embeds import (
 )
 
 log = logging.getLogger(__name__)
-
-
-# Action keys for the action commands defined in this cog (no god/death; those are in a separate cog).
-SOLO_ACTION_KEYS = (
-    "work", "beg", "daily",                                        # T1
-    "forage", "tinker",                                            # T2 solo
-    "patrol-demacia", "meditate-ionia", "hunt-shadowisles",        # T3 solo
-    "ascend", "darkin-pact", "defend-targon", "void-touch",        # T4
-    "void-incursion", "celestial-gaze", "freljord-storm", "judgment",  # T5
-)
-
-PVP_ACTION_KEYS = (
-    "prank", "duel",            # T2
-    "heist-piltover", "raid-noxus",  # T3
-)
 
 
 async def _run_and_reply(interaction: discord.Interaction, key: str) -> ActionSuccess | None:
@@ -59,7 +51,7 @@ class Actions(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # ----- Solo (no @target) -------------------------------------------------
+    # ----- Global economy (no region / no champ required) --------------------
 
     @app_commands.command(name="work", description=ACTIONS["work"].description)
     @register_user
@@ -82,98 +74,7 @@ class Actions(commands.Cog):
         if result is not None:
             await interaction.response.send_message(embed=action_result_embed(result))
 
-    @app_commands.command(name="forage", description=ACTIONS["forage"].description)
-    @register_user
-    async def forage(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "forage")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="tinker", description=ACTIONS["tinker"].description)
-    @register_user
-    async def tinker(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "tinker")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="patrol-demacia", description=ACTIONS["patrol-demacia"].description)
-    @register_user
-    async def patrol_demacia(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "patrol-demacia")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="meditate-ionia", description=ACTIONS["meditate-ionia"].description)
-    @register_user
-    async def meditate_ionia(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "meditate-ionia")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="hunt-shadowisles", description=ACTIONS["hunt-shadowisles"].description)
-    @register_user
-    async def hunt_shadowisles(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "hunt-shadowisles")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="ascend", description=ACTIONS["ascend"].description)
-    @register_user
-    async def ascend(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "ascend")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="darkin-pact", description=ACTIONS["darkin-pact"].description)
-    @register_user
-    async def darkin_pact(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "darkin-pact")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="defend-targon", description=ACTIONS["defend-targon"].description)
-    @register_user
-    async def defend_targon(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "defend-targon")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="void-touch", description=ACTIONS["void-touch"].description)
-    @register_user
-    async def void_touch(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "void-touch")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="void-incursion", description=ACTIONS["void-incursion"].description)
-    @register_user
-    async def void_incursion(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "void-incursion")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="celestial-gaze", description=ACTIONS["celestial-gaze"].description)
-    @register_user
-    async def celestial_gaze(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "celestial-gaze")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="freljord-storm", description=ACTIONS["freljord-storm"].description)
-    @register_user
-    async def freljord_storm(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "freljord-storm")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="judgment", description=ACTIONS["judgment"].description)
-    @register_user
-    async def judgment(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "judgment")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    # ----- PvP-triggering actions (require @target) --------------------------
+    # ----- PvP-triggering region raids (require @target) ---------------------
 
     @app_commands.command(name="prank", description=ACTIONS["prank"].description)
     @app_commands.describe(target="Who to prank.")
@@ -217,7 +118,6 @@ class Actions(commands.Cog):
         # paid, no cooldown is set. Single failure embed, no double-message.
         reason, _status = await check_pvp_eligibility(interaction.user.id, target.id)
         if reason is not None:
-            # Tailor messages for the most common cases for nicer copy.
             if _status == "immune":
                 msg = f"{target.display_name} is wreathed in Lamb's Respite. Untouchable."
             elif _status == "capped":
@@ -247,15 +147,12 @@ class Actions(commands.Cog):
 
         await interaction.response.send_message(embed=action_result_embed(action_result))
 
-        # Resolve PvP layer. Things can still go sideways (kindred_passive
-        # auto-tie, or the target became immune between the precheck and now),
-        # but those are rare and the user already saw the action result.
+        # Resolve PvP layer.
         outcome = await attempt_pvp(interaction.user.id, target.id, gold_stake_pct=stake_pct)
         if outcome.error:
             await interaction.followup.send(embed=failure_embed(outcome.error))
             return
         if outcome.immune or outcome.capped:
-            # Edge: defender's state changed between precheck and execution.
             await interaction.followup.send(
                 embed=failure_embed(
                     f"{target.display_name} slipped away before the strike landed."

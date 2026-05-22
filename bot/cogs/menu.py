@@ -316,41 +316,47 @@ class Menu(commands.Cog):
                 inline=False,
             )
 
-        # ── Regional exploration ───────────────────────────────────────────
-        from bot.game.pve.encounters import regions_list
-        owned_regions = {e.champion.region for e in loadout if e.champion.region}
-        available_explore: list[str] = []
-        explore_locked_by_champ: list[str] = []
-        explore_on_cd: list[tuple[str, float]] = []
-        for region in regions_list():
-            cd_key = f"explore:{region.lower()}"
-            cd_remaining = cooldowns.get(cd_key)
-            if region not in owned_regions:
-                explore_locked_by_champ.append(region)
-            elif cd_remaining is not None:
-                explore_on_cd.append((region, cd_remaining))
-            else:
-                available_explore.append(region)
+        # ── Runeterra adventure ────────────────────────────────────────────
+        from bot.game.world.goals import evaluate_goals
+        from bot.game.world.quests import quests_for_region
+        from bot.game.world.regions import WORLD, get_region, tier_band_label
 
-        explore_lines: list[str] = []
-        if available_explore:
-            explore_lines.append(
-                "✅ Up: " + ", ".join(sorted(available_explore))
+        region = get_region(user.current_region)
+        if region is not None:
+            adv_lines = [f"📍 **{region.display}** ({tier_band_label(region)})"]
+            unlocked = set(await queries.list_unlocked_regions(user_id))
+            progress = await queries.all_goal_progress(user_id)
+            for nb_key in region.neighbors:
+                nb = WORLD.get(nb_key)
+                if nb is None or nb_key in unlocked or nb.hidden:
+                    continue
+                statuses = evaluate_goals(nb_key, user.gold, user.level, progress)
+                done = sum(1 for s in statuses if s.done)
+                if statuses and done == len(statuses):
+                    adv_lines.append(
+                        f"🔓 **{nb.display}** — goals complete! Travel via `/adventure`."
+                    )
+                else:
+                    adv_lines.append(f"🔒 {nb.display} — goals {done}/{len(statuses)}")
+            explore_cd = cooldowns.get(f"explore:{region.key}")
+            adv_lines.append(
+                f"🔭 Explore: ready in {_format_seconds(explore_cd)}"
+                if explore_cd
+                else "🔭 Explore: ready (via `/adventure`)"
             )
-        if explore_on_cd:
-            explore_on_cd.sort(key=lambda x: x[1])
-            cd_line = ", ".join(
-                f"{r} ({_format_seconds(s)})" for r, s in explore_on_cd[:4]
-            )
-            explore_lines.append("⏳ " + cd_line)
-        if not available_explore and not explore_on_cd and explore_locked_by_champ:
-            explore_lines.append(
-                "_Equip a champion from a region to /explore there._"
-            )
-        if explore_lines:
+            region_quests = quests_for_region(region.key)
+            if region_quests:
+                user_quests = await queries.list_user_quests(user_id)
+                active = sum(
+                    1 for q in region_quests if user_quests.get(q.key) == "active"
+                )
+                adv_lines.append(
+                    f"📜 Quests: {active} active of {len(region_quests)} "
+                    f"— manage via `/adventure`."
+                )
             embed.add_field(
-                name="🗺 Runeterra",
-                value="\n".join(explore_lines),
+                name="🧭 Runeterra Adventure",
+                value="\n".join(adv_lines),
                 inline=False,
             )
 

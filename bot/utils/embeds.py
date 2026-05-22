@@ -518,6 +518,54 @@ def adventure_hub_embed(
     return embed
 
 
+def region_actions_embed(region_key: str, avails: list, pvp_keys: list) -> discord.Embed:
+    """The /adventure → Region Actions panel. `avails` is a list of
+    ActionAvailability; `pvp_keys` are PvP raid action keys for this region."""
+    from bot.game.actions.registry import ACTIONS
+    from bot.game.actions.runner import COOLDOWN, ELIGIBLE, LOADOUT_LOCKED
+    from bot.game.world.regions import get_region
+
+    region = get_region(region_key)
+    display = region.display if region else region_key
+    embed = discord.Embed(
+        title=f"⚔ Region Actions — {display}",
+        description=(
+            "Actions available to you in this region."
+            if (avails or pvp_keys)
+            else "_No region actions here — try `/hunt-camp` instead._"
+        ),
+        color=0x795548,
+    )
+    for av in avails:
+        spec = av.spec
+        if av.status == ELIGIBLE:
+            line = "✅ Ready" + (
+                f" — via **{av.chosen_champ_name}**" if av.chosen_champ_name else ""
+            )
+        elif av.status == COOLDOWN:
+            line = f"⏳ Ready in {_format_seconds(av.seconds_remaining or 0)}"
+        elif av.status == LOADOUT_LOCKED:
+            line = f"🔒 Needs {av.missing_requirement} equipped (alive)"
+        else:
+            line = f"🌑 Locked — reach Level {av.required_level}"
+        reward = f"\n💰 ~{spec.base_gold} Gold · ✨ {spec.base_xp} XP"
+        embed.add_field(
+            name=f"{spec.name} — {spec.description}",
+            value=line + reward,
+            inline=False,
+        )
+    for key in pvp_keys:
+        spec = ACTIONS.get(key)
+        if spec is None:
+            continue
+        embed.add_field(
+            name=f"⚔ {spec.name} (PvP raid)",
+            value=f"{spec.description}\nUse `{spec.name} @target` to raid a player.",
+            inline=False,
+        )
+    return embed
+
+
 def quest_panel_embed(region_key: str, quest_states: list) -> discord.Embed:
     """The /adventure → Quests panel. `quest_states` is a list of
     (quest, status, current, target) tuples."""
