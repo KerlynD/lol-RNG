@@ -10,7 +10,7 @@ from bot.db.pool import get_pool
 from bot.db.queries import Champion, User
 from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
-from bot.game.pve.camps import CampSpec, cooldown_seconds
+from bot.game.pve.camps import CampSpec
 from bot.game.pve.combat import CampFightResult, resolve_camp_fight
 from bot.game.pve.souls import (
     SOUL_DROP_TO_TYPE,
@@ -36,7 +36,11 @@ async def run_camp_engage(
     camp: CampSpec,
     champ: Champion,
     rng: random.Random | None = None,
+    reward_factor: float = 1.0,
 ) -> EngageOutcome:
+    """Resolve a camp engagement. `reward_factor` (v3) scales win Gold/XP — it
+    carries the backtracking decay so hunting an early region late pays less.
+    """
     rng = rng or random
 
     # Consume red_buff_primed if present (+10% win pct). Manual activation
@@ -49,12 +53,14 @@ async def run_camp_engage(
 
     fight = resolve_camp_fight(champ, camp, red_buff=red_buff_active, rng=rng)
 
-    scaled_gold = (
-        gold_payout(camp.base_gold, user.level, user.prestige)
-        if fight.won
-        else fight.gold_delta            # already negative
-    )
-    xp_award = camp.base_xp if fight.won else 0
+    if fight.won:
+        scaled_gold = int(
+            gold_payout(camp.base_gold, user.level, user.prestige) * reward_factor
+        )
+        xp_award = max(1, int(camp.base_xp * reward_factor))
+    else:
+        scaled_gold = fight.gold_delta   # already negative — decay does not apply
+        xp_award = 0
     xp_result = apply_xp(user.xp, user.level, xp_award)
 
     # On win: apply soul-based bonus drops (Mountain/Chemtech/Hextech).

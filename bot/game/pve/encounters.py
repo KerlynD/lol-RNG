@@ -266,6 +266,48 @@ REGIONS: dict[str, tuple[Encounter, ...]] = {
             ),
         ),
     ),
+    "Ixtal": (
+        CombatEncounter(
+            kind="combat",
+            flavor="A Yun Tal warden challenges your right to walk the deep jungle.",
+            mob=RegionMob("Yun Tal Warden", tier=5, weak_to="AD", base_gold=900, base_xp=160),
+        ),
+        TreasureEncounter(
+            kind="treasure",
+            flavor="An elemental shrine, untouched for centuries, yields its offering.",
+            base_gold=850, bonus_drop="fragment_t5", drop_chance=0.25,
+        ),
+        LoreEncounter(
+            kind="lore",
+            flavor="An Ixtal elder explains why the nation hid itself from the world.",
+            lore_key="ixtal.isolation",
+            lore_text=(
+                "_Ixtal watched empires rise and fall, and chose silence. The "
+                "elemental arts are not for sale — and not for the careless._"
+            ),
+        ),
+    ),
+    "Void": (
+        CombatEncounter(
+            kind="combat",
+            flavor="A fragment of the Void peels away from the dark and lunges.",
+            mob=RegionMob("Void Aberration", tier=7, weak_to=None, base_gold=2200, base_xp=320),
+        ),
+        TreasureEncounter(
+            kind="treasure",
+            flavor="Reality thins — and something valuable falls through the gap.",
+            base_gold=1800, bonus_drop="soul", drop_chance=0.6,
+        ),
+        LoreEncounter(
+            kind="lore",
+            flavor="A half-claimed survivor whispers what the Void truly is.",
+            lore_key="void.hunger",
+            lore_text=(
+                "_The Void is not evil. It is empty, and emptiness wants. To "
+                "name it, to fight it, is only to be noticed by it._"
+            ),
+        ),
+    ),
     "Bandle City": (
         CombatEncounter(
             kind="combat",
