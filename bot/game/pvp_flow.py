@@ -67,8 +67,12 @@ async def attempt_pvp(
     defender_id: int,
     *,
     gold_stake_pct: float | None = None,
+    best_of: int = 3,
 ) -> PvpOutcome:
-    """Run a PvP encounter. Caller decorates the message — this is engine-level."""
+    """Run a PvP encounter. Caller decorates the message — this is engine-level.
+
+    `best_of=1` runs a single-round duel; the default 3 is a best-of-3 skirmish.
+    """
     if attacker_id == defender_id:
         return PvpOutcome(
             skirmish=None,  # type: ignore[arg-type]
@@ -164,6 +168,7 @@ async def attempt_pvp(
         defender_prestige=defender.prestige,
         attacker_power_multiplier=power_mult,
         defender_shields=shields,
+        best_of=best_of,
     )
 
     # Compute gold stake

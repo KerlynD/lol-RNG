@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import discord
 
-from bot.db.queries import Champion, LoadoutEntry, Trade, User
-from bot.game.combat import SkirmishResult
+from bot.db.queries import Champion, LoadoutEntry, RankedProfile, Trade, User
+from bot.game import ranked
 from bot.game.actions.runner import ActionSuccess
+from bot.game.combat import SkirmishResult
 from bot.game.leveling import unlocks_for, xp_to_next_level
+from bot.game.ranked_flow import RankedOutcome
 
 TIER_COLOR: dict[int, int] = {
     1: 0x9E9E9E,
@@ -388,6 +390,194 @@ def camp_result_embed(
     return embed
 
 
+# --- Ranked embeds -----------------------------------------------------------
+
+RANK_EMOJI: dict[str, str] = {
+    "Iron": "⚙️",
+    "Bronze": "🥉",
+    "Silver": "🥈",
+    "Gold": "🥇",
+    "Platinum": "💠",
+    "Diamond": "💎",
+    "Master": "🔮",
+    "Grandmaster": "👑",
+    "Challenger": "🏆",
+}
+
+RANK_COLOR: dict[str, int] = {
+    "Iron": 0x5C5C5C,
+    "Bronze": 0x8C6239,
+    "Silver": 0x9FA8B0,
+    "Gold": 0xF1C40F,
+    "Platinum": 0x1ABC9C,
+    "Diamond": 0x3498DB,
+    "Master": 0x9B59B6,
+    "Grandmaster": 0xE74C3C,
+    "Challenger": 0xF39C12,
+}
+
+
+def _rank_label(profile: RankedProfile) -> str:
+    """Short rank descriptor, e.g. '🥇 Gold · 640 LP'."""
+    if profile.in_placements:
+        return f"Unranked · placements {profile.placement_games}/5"
+    name = ranked.tier_name(profile.lp)
+    return f"{RANK_EMOJI.get(name, '')} {name} · {profile.lp} LP"
+
+
+def _ranked_progress_line(
+    name: str,
+    profile: RankedProfile,
+    lp_delta: int,
+    completed_placements: bool,
+) -> str:
+    if completed_placements:
+        return f"**{name}** — placements complete → {_rank_label(profile)}"
+    if profile.in_placements:
+        return f"**{name}** — placements {profile.placement_games}/5 _(no LP yet)_"
+    delta = f"+{lp_delta}" if lp_delta >= 0 else str(lp_delta)
+    return f"**{name}** — {_rank_label(profile)}  _({delta} LP)_"
+
+
+def attack_panel_embed(
+    attacker_name: str,
+    target_name: str,
+    alive_loadout: list[LoadoutEntry],
+    heist_note: str,
+    raid_note: str,
+) -> discord.Embed:
+    """The /attack control panel — shows the attacker's champions + options."""
+    if alive_loadout:
+        champ_lines = "\n".join(
+            f"  Slot {e.slot}: **{e.champion.name}** "
+            f"(T{e.champion.tier} {e.champion.damage_type})"
+            for e in alive_loadout
+        )
+    else:
+        champ_lines = "  _no alive champions — check /menu for revive timers_"
+    lines = [
+        f"Target: **{target_name}**",
+        "",
+        "**Your champions**",
+        champ_lines,
+        "",
+        "**⚔️ Ranked Match** — best-of-3 skirmish, moves League Points.",
+        "**🗡️ Unranked Duel** — single round, small gold stake.",
+        "**🃏 Prank** — steal a sliver of their gold.",
+    ]
+    if heist_note:
+        lines.append(f"_💰 Heist — {heist_note}_")
+    if raid_note:
+        lines.append(f"_🔥 Raid — {raid_note}_")
+    return discord.Embed(
+        title=f"⚔️ Attack — {attacker_name}",
+        description="\n".join(lines),
+        color=0xF44336,
+    )
+
+
+def ranked_result_embeds(
+    attacker: discord.abc.User,
+    defender: discord.abc.User,
+    outcome: RankedOutcome,
+) -> list[discord.Embed]:
+    """Summary + attacker/defender champion cards for a finished ranked match."""
+    skirmish = outcome.skirmish
+    color = 0x4CAF50 if outcome.attacker_won else 0xF44336
+
+    lines: list[str] = []
+    for i, r in enumerate(skirmish.rounds, start=1):
+        winner_label = attacker.display_name if r.attacker_won else defender.display_name
+        lines.append(f"**Round {i}** — winner: **{winner_label}**\n{r.flavor}")
+    winner = attacker if outcome.attacker_won else defender
+    body = "\n\n".join(lines)
+    body += (
+        f"\n\n**{winner.display_name} wins the skirmish!** "
+        f"({skirmish.rounds_won_by_attacker}–{skirmish.rounds_won_by_defender})"
+    )
+    body += "\n\n__League Points__\n"
+    body += _ranked_progress_line(
+        attacker.display_name, outcome.attacker_profile,
+        outcome.attacker_lp_delta, outcome.attacker_completed_placements,
+    )
+    body += "\n" + _ranked_progress_line(
+        defender.display_name, outcome.defender_profile,
+        outcome.defender_lp_delta, outcome.defender_completed_placements,
+    )
+
+    summary = discord.Embed(
+        title=f"⚔️ Ranked — {attacker.display_name} vs {defender.display_name}",
+        description=body,
+        color=color,
+    )
+    # Reuse the champion icon cards from the skirmish renderer.
+    cards = skirmish_embeds(attacker, defender, skirmish, 0)[1:]
+    return [summary, *cards]
+
+
+def rank_card_embed(display_name: str, profile: RankedProfile) -> discord.Embed:
+    """Personal rank card for /rank."""
+    if profile.in_placements:
+        losses = profile.placement_games - profile.placement_wins
+        desc = (
+            f"**Placement matches:** {profile.placement_games} / 5\n"
+            f"Record so far: **{profile.placement_wins}W** · **{losses}L**\n\n"
+            f"_Finish all 5 placements to be seeded into a rank._"
+        )
+        return discord.Embed(
+            title=f"Rank — {display_name}", description=desc, color=0x607D8B
+        )
+
+    name = ranked.tier_name(profile.lp)
+    floor = ranked.next_tier_floor(profile.lp)
+    progress = (
+        f"{floor - profile.lp} LP to the next tier"
+        if floor is not None
+        else "Top of the ladder — Challenger"
+    )
+    total = profile.wins + profile.losses
+    winrate = f"{round(100 * profile.wins / total)}%" if total else "—"
+    lines = [
+        f"**{RANK_EMOJI.get(name, '')} {name}** — **{profile.lp} LP**",
+        f"_{progress}_",
+        "",
+        f"Wins: **{profile.wins}** · Losses: **{profile.losses}** · Win rate: **{winrate}**",
+    ]
+    if profile.win_streak >= 2:
+        lines.append(f"🔥 On a **{profile.win_streak}-win** streak")
+    elif profile.loss_streak >= 2:
+        lines.append(f"❄️ On a **{profile.loss_streak}-loss** streak")
+    return discord.Embed(
+        title=f"Rank — {display_name}",
+        description="\n".join(lines),
+        color=RANK_COLOR.get(name, 0x3F51B5),
+    )
+
+
+def leaderboard_embed(rows: list[tuple[int, str, RankedProfile]]) -> discord.Embed:
+    """`rows` is (position, display_name_or_mention, profile), already sorted."""
+    if not rows:
+        return discord.Embed(
+            title="🏆 Ranked Leaderboard",
+            description="_No players have finished placements yet._",
+            color=0xFFC107,
+        )
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines: list[str] = []
+    for pos, display, p in rows:
+        marker = medals.get(pos, f"`#{pos}`")
+        name = ranked.tier_name(p.lp)
+        lines.append(
+            f"{marker} {display} — {RANK_EMOJI.get(name, '')} **{name}** · "
+            f"{p.lp} LP _({p.wins}W/{p.losses}L)_"
+        )
+    return discord.Embed(
+        title="🏆 Ranked Leaderboard",
+        description="\n".join(lines),
+        color=0xFFC107,
+    )
+
+
 # --- Runeterra adventure embeds (v3) -----------------------------------------
 
 # Drop a hosted image of the map of Runeterra here to show it on
@@ -558,9 +748,11 @@ def region_actions_embed(region_key: str, avails: list, pvp_keys: list) -> disco
         spec = ACTIONS.get(key)
         if spec is None:
             continue
+        raid_name = spec.name.lstrip("/").replace("-", " ").title()
         embed.add_field(
-            name=f"⚔ {spec.name} (PvP raid)",
-            value=f"{spec.description}\nUse `{spec.name} @target` to raid a player.",
+            name=f"⚔ {raid_name} (PvP raid)",
+            value=f"{spec.description}\nRun `/attack @target` — this raid is a "
+                  "button on the attack panel.",
             inline=False,
         )
     return embed
