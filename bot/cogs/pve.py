@@ -15,6 +15,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
+from bot.game.champions.abilities import progress_win_bonus
 from bot.game.pve.camps import CampSpec, cooldown_seconds
 from bot.game.pve.combat import lead_champion, preview_win_pct
 from bot.game.pve.encounters import REGIONS, LoreEncounter
@@ -43,7 +44,7 @@ from bot.utils.embeds import (
 )
 
 if TYPE_CHECKING:
-    from bot.db.queries import Champion
+    from bot.db.queries import LoadoutEntry
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +63,8 @@ class HuntEncounterView(discord.ui.View):
         *,
         owner_id: int,
         camp: CampSpec,
-        champ: Champion | None,
+        champ_entry: "LoadoutEntry | None",
+        loadout: "list[LoadoutEntry]",
         cooldown_set: int,
         reward_factor: float = 1.0,
         opponent_splash: str | None = None,
@@ -71,7 +73,8 @@ class HuntEncounterView(discord.ui.View):
         super().__init__(timeout=float(ENCOUNTER_TIMEOUT_SEC))
         self.owner_id = owner_id
         self.camp = camp
-        self.champ = champ
+        self.champ_entry = champ_entry
+        self.loadout = loadout
         self.cooldown_set = cooldown_set
         self.reward_factor = reward_factor
         self.opponent_splash = opponent_splash
@@ -79,7 +82,7 @@ class HuntEncounterView(discord.ui.View):
         self.message: discord.Message | None = None
         self.resolved = False
 
-        if champ is None:
+        if champ_entry is None:
             # No alive champ — disable both buttons (we still create them for layout).
             for child in self.children:
                 child.disabled = True  # type: ignore[attr-defined]
@@ -93,7 +96,7 @@ class HuntEncounterView(discord.ui.View):
         return True
 
     async def on_timeout(self) -> None:
-        if self.resolved or self.champ is None:
+        if self.resolved or self.champ_entry is None:
             return
         # Auto back-out — cooldown was set on /hunt-camp; nothing else to do.
         try:
@@ -111,7 +114,7 @@ class HuntEncounterView(discord.ui.View):
     async def hunt(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ) -> None:
-        if self.champ is None:
+        if self.champ_entry is None:
             await interaction.response.send_message(
                 embed=failure_embed("All your champions are dead. Check `/menu`."),
                 ephemeral=True,
@@ -124,7 +127,8 @@ class HuntEncounterView(discord.ui.View):
 
         user = await queries.get_user(self.owner_id)
         outcome = await run_camp_engage(
-            user, self.camp, self.champ, reward_factor=self.reward_factor
+            user, self.camp, self.champ_entry, self.loadout,
+            reward_factor=self.reward_factor,
         )
         # Region unlock-goal progress: count won hunts (and wild-champ kills).
         if outcome.fight.won and self.region_key:
@@ -137,12 +141,31 @@ class HuntEncounterView(discord.ui.View):
                 )
         await interaction.response.edit_message(
             embed=camp_result_embed(
-                self.camp, self.champ, outcome,
+                self.camp, self.champ_entry.champion, outcome,
                 opponent_splash=self.opponent_splash,
             ),
             view=self,
         )
         self.stop()
+
+        # Champion level-ups: a non-ephemeral popup for the lead, a compact
+        # line for any passive loadout champ that also levelled.
+        lead_up = next((lu for lu in outcome.champ_levelups if lu.is_lead), None)
+        others = [lu for lu in outcome.champ_levelups if not lu.is_lead]
+        if lead_up is not None:
+            from bot.cogs.champion_levels import AbilityUpgradeView
+            up_view = AbilityUpgradeView(
+                self.owner_id, lead_up.champion, lead_up.progress,
+                leveled_to=lead_up.new_level,
+            )
+            await interaction.followup.send(embed=up_view.embed(), view=up_view)
+        if others:
+            names = ", ".join(lu.champion.name for lu in others)
+            await interaction.followup.send(
+                embed=info_embed(
+                    f"🆙 Also levelled up: **{names}** — spend points with `/champion`."
+                )
+            )
 
     @discord.ui.button(label="Back out", style=discord.ButtonStyle.secondary, emoji="🏃")
     async def back_out(
@@ -229,9 +252,9 @@ class PVE(commands.Cog):
 
         # 5. Pick the best alive champion (if any)
         loadout = await queries.alive_loadout(interaction.user.id)
-        champ = lead_champion(loadout)
+        lead = lead_champion(loadout)   # LoadoutEntry | None
 
-        if champ is None:
+        if lead is None:
             embed = encounter_embed(camp, None, 0.0, opponent_splash=opponent_splash)
             embed.description = (
                 f"{embed.description}\n\n"
@@ -239,23 +262,27 @@ class PVE(commands.Cog):
                 "The hunt cooldown still applies."
             )
             view = HuntEncounterView(
-                owner_id=interaction.user.id, camp=camp, champ=None,
-                cooldown_set=cd, reward_factor=reward_factor,
+                owner_id=interaction.user.id, camp=camp, champ_entry=None,
+                loadout=loadout, cooldown_set=cd, reward_factor=reward_factor,
                 opponent_splash=opponent_splash, region_key=region.key,
             )
             await interaction.response.send_message(embed=embed, view=view)
             view.message = await interaction.original_response()
             return
 
-        win_pct = preview_win_pct(champ, camp)
-        embed = encounter_embed(camp, champ, win_pct, opponent_splash=opponent_splash)
+        win_pct = preview_win_pct(
+            lead.champion, camp, champ_bonus=progress_win_bonus(lead.progress)
+        )
+        embed = encounter_embed(
+            camp, lead.champion, win_pct, opponent_splash=opponent_splash
+        )
         if reward_factor < 1.0:
             embed.set_footer(
                 text=f"⬇ Backtracking — rewards here scaled to {int(reward_factor * 100)}%."
             )
         view = HuntEncounterView(
-            owner_id=interaction.user.id, camp=camp, champ=champ,
-            cooldown_set=cd, reward_factor=reward_factor,
+            owner_id=interaction.user.id, camp=camp, champ_entry=lead,
+            loadout=loadout, cooldown_set=cd, reward_factor=reward_factor,
             opponent_splash=opponent_splash, region_key=region.key,
         )
         await interaction.response.send_message(embed=embed, view=view)

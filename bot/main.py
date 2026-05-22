@@ -25,6 +25,7 @@ COGS = (
     "bot.cogs.inventory",
     "bot.cogs.loadout",
     "bot.cogs.actions",
+    "bot.cogs.champion_levels",
     "bot.cogs.pve",
     "bot.cogs.pvp",
     "bot.cogs.ambient",

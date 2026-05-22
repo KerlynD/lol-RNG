@@ -45,8 +45,8 @@ def test_win_pct_matched_is_50():
 def test_win_pct_extreme_mismatch_floors():
     c = _champ("c", 1)
     drake = CAMPS["drake_cloud"]  # tier 4
-    # diff = -3 → 0.5%
-    assert preview_win_pct(c, drake) == 0.5
+    # diff = -3 -> table floor on the rebalanced curve.
+    assert preview_win_pct(c, drake) == PVE_WIN_PCT_BY_DIFF[-3]
 
 
 def test_weakness_bonus_applied():
@@ -81,7 +81,8 @@ def test_resolve_loss_costs_fail_gold_pct():
             losses += 1
             assert r.gold_delta == -int(drake.base_gold * FAIL_GOLD_PCT)
             assert r.respawn_seconds == DEFAULT_RESPAWN_SEC  # diff <= -4 fallback; -3 uses table
-    assert losses > sample * 0.9
+    # On the rebalanced curve diff -3 wins ~12%, so the vast majority lose.
+    assert losses > sample * 0.7
 
 
 def test_respawn_table_keys():
@@ -107,6 +108,50 @@ def test_matched_loss_gives_5min_respawn():
             found_loss = True
             break
     assert found_loss
+
+
+def test_win_table_symmetric_around_50():
+    """Each +N entry should mirror its -N entry around the matched 50 baseline."""
+    for diff, pct in PVE_WIN_PCT_BY_DIFF.items():
+        opp = PVE_WIN_PCT_BY_DIFF.get(-diff)
+        if opp is not None:
+            assert abs((pct - 50) + (opp - 50)) < 0.5, (diff, pct, opp)
+
+
+def test_champ_bonus_adds_and_clamps():
+    """Champion ability bonus stacks additively and the result clamps to 1..99."""
+    c = _champ("c", 3)
+    camp = CAMPS["krugs"]   # tier 1 -> diff +2 -> 78 on rebalanced table
+    base = preview_win_pct(c, camp)
+    boosted = preview_win_pct(c, camp, champ_bonus=10)
+    assert boosted == min(99.0, base + 10)
+    # Massive bonus clamps at 99.
+    extreme = preview_win_pct(c, camp, champ_bonus=500)
+    assert extreme == 99.0
+    # Negative champ bonus on top of a -4 result floors at 1.
+    weak = _champ("w", 1)
+    drake = CAMPS["drake_infernal"]
+    floored = preview_win_pct(weak, drake, champ_bonus=-500)
+    assert floored == 1.0
+
+
+def test_revive_potion_drops_approx_2pct():
+    """The 2% revive-potion drop fires on wins across the camp pool."""
+    from bot.game.pve.combat import REVIVE_POTION_DROP_CHANCE
+    c = _champ("c", 6)
+    camp = CAMPS["krugs"]
+    rng = random.Random(7)
+    wins = 0
+    revives = 0
+    for _ in range(2000):
+        r = resolve_camp_fight(c, camp, rng=rng)
+        if r.won:
+            wins += 1
+            if any(t == "revive_potion" for t, _ in r.drops):
+                revives += 1
+    rate = revives / wins
+    # Generous bounds around the configured probability.
+    assert REVIVE_POTION_DROP_CHANCE * 0.4 < rate < REVIVE_POTION_DROP_CHANCE * 2.0
 
 
 def test_winning_camp_gives_drops_when_certain():

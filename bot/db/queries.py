@@ -49,16 +49,30 @@ class Champion:
 
 
 @dataclass(frozen=True)
+class ChampProgress:
+    """Per-owned-champion progression state (migration 0009)."""
+    champ_level: int = 1
+    champ_xp: int = 0
+    q_rank: int = 0
+    w_rank: int = 0
+    e_rank: int = 0
+    r_rank: int = 0
+    unspent_points: int = 1
+
+
+@dataclass(frozen=True)
 class OwnedChampion:
     champion: Champion
     locked: bool
     acquired_at: datetime
+    progress: ChampProgress = ChampProgress()
 
 
 @dataclass(frozen=True)
 class LoadoutEntry:
     slot: int
     champion: Champion
+    progress: ChampProgress = ChampProgress()
 
 
 @dataclass(frozen=True)
@@ -89,6 +103,19 @@ def _row_to_champion(row: asyncpg.Record) -> Champion:
         damage_type=row["damage_type"],
         drop_weight=row["drop_weight"],
         splash_url=row["splash_url"],
+    )
+
+
+def _row_to_progress(row: asyncpg.Record) -> ChampProgress:
+    """Build ChampProgress from a row that includes the user_champions columns."""
+    return ChampProgress(
+        champ_level=row["champ_level"],
+        champ_xp=row["champ_xp"],
+        q_rank=row["q_rank"],
+        w_rank=row["w_rank"],
+        e_rank=row["e_rank"],
+        r_rank=row["r_rank"],
+        unspent_points=row["unspent_points"],
     )
 
 
@@ -264,10 +291,16 @@ async def own_champion(
     return row is not None
 
 
+_UC_PROGRESS_COLS = (
+    "uc.champ_level, uc.champ_xp, uc.q_rank, uc.w_rank, "
+    "uc.e_rank, uc.r_rank, uc.unspent_points"
+)
+
+
 async def list_owned(discord_id: int) -> list[OwnedChampion]:
     rows = await get_pool().fetch(
-        """
-        SELECT c.*, uc.locked, uc.acquired_at
+        f"""
+        SELECT c.*, uc.locked, uc.acquired_at, {_UC_PROGRESS_COLS}
           FROM user_champions uc
           JOIN champions c ON c.id = uc.champion_id
          WHERE uc.user_id = $1
@@ -280,6 +313,7 @@ async def list_owned(discord_id: int) -> list[OwnedChampion]:
             champion=_row_to_champion(r),
             locked=r["locked"],
             acquired_at=r["acquired_at"],
+            progress=_row_to_progress(r),
         )
         for r in rows
     ]
@@ -329,16 +363,23 @@ async def remove_champion(
 
 async def get_loadout(discord_id: int) -> list[LoadoutEntry]:
     rows = await get_pool().fetch(
-        """
-        SELECT l.slot, c.*
+        f"""
+        SELECT l.slot, c.*, {_UC_PROGRESS_COLS}
           FROM loadouts l
           JOIN champions c ON c.id = l.champion_id
+          JOIN user_champions uc
+                ON uc.user_id = l.user_id AND uc.champion_id = l.champion_id
          WHERE l.user_id = $1
          ORDER BY l.slot
         """,
         discord_id,
     )
-    return [LoadoutEntry(slot=r["slot"], champion=_row_to_champion(r)) for r in rows]
+    return [
+        LoadoutEntry(
+            slot=r["slot"], champion=_row_to_champion(r), progress=_row_to_progress(r)
+        )
+        for r in rows
+    ]
 
 
 # ----------------------------------------------------------------------------
@@ -387,10 +428,12 @@ async def champion_is_alive(discord_id: int, champion_id: int) -> bool:
 async def alive_loadout(discord_id: int) -> list[LoadoutEntry]:
     """Same as get_loadout but skips champions in respawn cooldown."""
     rows = await get_pool().fetch(
-        """
-        SELECT l.slot, c.*
+        f"""
+        SELECT l.slot, c.*, {_UC_PROGRESS_COLS}
           FROM loadouts l
           JOIN champions c ON c.id = l.champion_id
+          JOIN user_champions uc
+                ON uc.user_id = l.user_id AND uc.champion_id = l.champion_id
           LEFT JOIN cooldowns cd
                  ON cd.user_id = l.user_id
                 AND cd.action_key = '_champ:' || c.id::text
@@ -400,7 +443,12 @@ async def alive_loadout(discord_id: int) -> list[LoadoutEntry]:
         """,
         discord_id,
     )
-    return [LoadoutEntry(slot=r["slot"], champion=_row_to_champion(r)) for r in rows]
+    return [
+        LoadoutEntry(
+            slot=r["slot"], champion=_row_to_champion(r), progress=_row_to_progress(r)
+        )
+        for r in rows
+    ]
 
 
 # ----------------------------------------------------------------------------
@@ -1303,6 +1351,88 @@ async def admin_v3_reset(wipe_tier: int) -> dict[str, int]:
         "loadout_slots": loadout_removed or 0,
         "users_releveled": users_reset or 0,
     }
+
+
+# ----------------------------------------------------------------------------
+# Champion levels (migration 0009) — progression + revive
+# ----------------------------------------------------------------------------
+
+
+async def get_champ_progress(
+    discord_id: int, champion_id: int, *, conn: asyncpg.Connection | None = None
+) -> ChampProgress | None:
+    query = """
+        SELECT champ_level, champ_xp, q_rank, w_rank, e_rank, r_rank, unspent_points
+          FROM user_champions
+         WHERE user_id = $1 AND champion_id = $2
+    """
+    executor = conn or get_pool()
+    row = await executor.fetchrow(query, discord_id, champion_id)
+    return _row_to_progress(row) if row else None
+
+
+async def set_champ_progress(
+    discord_id: int,
+    champion_id: int,
+    progress: ChampProgress,
+    *,
+    conn: asyncpg.Connection | None = None,
+) -> None:
+    query = """
+        UPDATE user_champions SET
+            champ_level = $3, champ_xp = $4,
+            q_rank = $5, w_rank = $6, e_rank = $7, r_rank = $8,
+            unspent_points = $9
+         WHERE user_id = $1 AND champion_id = $2
+    """
+    args = (
+        discord_id, champion_id, progress.champ_level, progress.champ_xp,
+        progress.q_rank, progress.w_rank, progress.e_rank, progress.r_rank,
+        progress.unspent_points,
+    )
+    executor = conn or get_pool()
+    await executor.execute(query, *args)
+
+
+async def rank_ability(
+    discord_id: int, champion_id: int, ability: str
+) -> ChampProgress | None:
+    """Atomically spend one ability point. Returns the new progress, or None if
+    the upgrade was not allowed (no points / rank capped / R level-gated)."""
+    ability = ability.lower()
+    if ability == "r":
+        # R gates: rank 1 needs champ_level >= 6, rank 2 >= 11, rank 3 >= 16.
+        query = """
+            UPDATE user_champions
+               SET r_rank = r_rank + 1, unspent_points = unspent_points - 1
+             WHERE user_id = $1 AND champion_id = $2
+               AND unspent_points > 0 AND r_rank < 3
+               AND champ_level >= CASE r_rank + 1
+                                      WHEN 1 THEN 6 WHEN 2 THEN 11 ELSE 16 END
+            RETURNING champ_level, champ_xp, q_rank, w_rank, e_rank, r_rank, unspent_points
+        """
+    elif ability in ("q", "w", "e"):
+        col = f"{ability}_rank"
+        query = f"""
+            UPDATE user_champions
+               SET {col} = {col} + 1, unspent_points = unspent_points - 1
+             WHERE user_id = $1 AND champion_id = $2
+               AND unspent_points > 0 AND {col} < 5
+            RETURNING champ_level, champ_xp, q_rank, w_rank, e_rank, r_rank, unspent_points
+        """
+    else:
+        return None
+    row = await get_pool().fetchrow(query, discord_id, champion_id)
+    return _row_to_progress(row) if row else None
+
+
+async def revive_champion(
+    discord_id: int, champion_id: int, *, conn: asyncpg.Connection | None = None
+) -> None:
+    """Clear a champion's respawn cooldown — used by the revive potion."""
+    query = "DELETE FROM cooldowns WHERE user_id = $1 AND action_key = $2"
+    executor = conn or get_pool()
+    await executor.execute(query, discord_id, _champ_respawn_key(champion_id))
 
 
 # ----------------------------------------------------------------------------

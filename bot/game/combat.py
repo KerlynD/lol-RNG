@@ -11,6 +11,7 @@ import struct
 from dataclasses import dataclass
 
 from bot.db.queries import Champion, LoadoutEntry
+from bot.game.champions.abilities import progress_win_bonus
 
 # --- Per-tier base stats -----------------------------------------------------
 #
@@ -178,6 +179,8 @@ def simulate_round(
     defender_prestige: int,
     defender_shields: dict[str, int],
     attacker_power_multiplier: float = 1.0,
+    attacker_champ_bonus: float = 0.0,
+    defender_champ_bonus: float = 0.0,
     rng: random.Random | None = None,
 ) -> RoundResult:
     rng = rng or random
@@ -188,6 +191,11 @@ def simulate_round(
     )
     def_power = power_score(defender_champ, defender_level, defender_prestige)
     win_pct = _win_pct(atk_power, def_power)
+    # Champion ability ranks shift the round odds (PvP champ-level bonus).
+    win_pct = max(
+        WIN_PCT_MIN,
+        min(WIN_PCT_MAX, round(win_pct + attacker_champ_bonus - defender_champ_bonus)),
+    )
     roll = rng.randint(1, 100)
     attacker_won = roll <= win_pct
 
@@ -271,6 +279,10 @@ def simulate_skirmish(
     shields = dict(defender_shields or {})
     rounds_to_win = best_of // 2 + 1
 
+    # Per-owned champion-level ability bonus, keyed by champion id per side.
+    atk_bonus_by_id = {e.champion.id: progress_win_bonus(e.progress) for e in attacker_loadout}
+    def_bonus_by_id = {e.champion.id: progress_win_bonus(e.progress) for e in defender_loadout}
+
     used_attackers: set[int] = set()
     used_defenders: set[int] = set()
     rounds: list[RoundResult] = []
@@ -293,6 +305,8 @@ def simulate_skirmish(
             defender_prestige=defender_prestige,
             defender_shields=shields,
             attacker_power_multiplier=attacker_power_multiplier,
+            attacker_champ_bonus=atk_bonus_by_id.get(a_champ.id, 0.0),
+            defender_champ_bonus=def_bonus_by_id.get(d_champ.id, 0.0),
             rng=rng,
         )
         rounds.append(result)

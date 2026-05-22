@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from bot.db import queries
+from bot.game.champions.abilities import progress_win_bonus
+from bot.game.champions.leveling import EXPLORE_LEAD_FACTOR, EXPLORE_PASSIVE_SHARE
+from bot.game.champions.xp import award_champ_xp
 from bot.game.combat import power_score
 from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
@@ -74,28 +77,33 @@ async def run_explore(user, region_key: str, rng: random.Random | None = None) -
         )
 
     loadout = await queries.alive_loadout(user.discord_id)
-    lead = max((e.champion for e in loadout), key=power_score) if loadout else None
+    lead_entry = (
+        max(loadout, key=lambda e: power_score(e.champion)) if loadout else None
+    )
 
     encounter = rng.choice(pool)
     # Combat needs a living champion — without one, fall back to a safe vignette.
-    if isinstance(encounter, CombatEncounter) and lead is None:
+    if isinstance(encounter, CombatEncounter) and lead_entry is None:
         safe = [e for e in pool if not isinstance(e, CombatEncounter)]
         if safe:
             encounter = rng.choice(safe)
 
     if isinstance(encounter, CombatEncounter):
-        return await _resolve_combat(user, encounter, lead, rng)
+        return await _resolve_combat(user, encounter, lead_entry, loadout, rng)
     if isinstance(encounter, TreasureEncounter):
         return await _resolve_treasure(user, encounter, rng)
     return await _resolve_lore(user, encounter)
 
 
-async def _resolve_combat(user, enc, lead, rng) -> ExploreResult:
+async def _resolve_combat(user, enc, lead_entry, loadout, rng) -> ExploreResult:
     mob = enc.mob
+    lead = lead_entry.champion
     diff = max(-4, min(4, lead.tier - mob.tier))
     win_pct = PVE_WIN_PCT_BY_DIFF[diff]
     if mob.weak_to and lead.damage_type == mob.weak_to:
-        win_pct = min(99.0, win_pct + WEAKNESS_BONUS_PCT)
+        win_pct += WEAKNESS_BONUS_PCT
+    win_pct += progress_win_bonus(lead_entry.progress)
+    win_pct = max(1.0, min(99.0, win_pct))
     won = rng.uniform(0, 100) < win_pct
 
     if won:
@@ -105,15 +113,24 @@ async def _resolve_combat(user, enc, lead, rng) -> ExploreResult:
         await queries.set_user_level_xp(
             user.discord_id, xp_result.new_level, xp_result.new_xp
         )
+        # Menial champ XP for the loadout (explore is a minor source).
+        levelups = await award_champ_xp(
+            user.discord_id, loadout, lead.id,
+            round(mob.base_xp * EXPLORE_LEAD_FACTOR), EXPLORE_PASSIVE_SHARE,
+        )
         level_line = (
             f"\n✨ **Level up → {xp_result.leveled_up_to}**"
             if xp_result.leveled_up_to else ""
         )
+        champ_line = ""
+        if levelups:
+            names = ", ".join(lu.champion.name for lu in levelups)
+            champ_line = f"\n🆙 **{names}** levelled up — see `/champion`."
         return ExploreResult(
             title="Exploration — Victory",
             description=(
                 f"{enc.flavor}\n\n**{lead.name}** dispatches the **{mob.name}**.\n"
-                f"Gold **+{gold:,}** · XP **+{mob.base_xp}**{level_line}"
+                f"Gold **+{gold:,}** · XP **+{mob.base_xp}**{level_line}{champ_line}"
             ),
             color=0x4CAF50,
         )

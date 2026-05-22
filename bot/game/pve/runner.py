@@ -7,7 +7,14 @@ from datetime import timedelta
 
 from bot.db import queries
 from bot.db.pool import get_pool
-from bot.db.queries import Champion, User
+from bot.db.queries import Champion, ChampProgress, LoadoutEntry, User
+from bot.game.champions.abilities import progress_win_bonus
+from bot.game.champions.leveling import (
+    HUNT_LEAD_FACTOR,
+    HUNT_PASSIVE_SHARE,
+    apply_champ_xp,
+    passive_xp,
+)
 from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
 from bot.game.pve.camps import CampSpec
@@ -22,6 +29,15 @@ HUNT_CAMP_KEY = "hunt-camp"
 
 
 @dataclass(frozen=True)
+class ChampLevelUp:
+    champion: Champion
+    old_level: int
+    new_level: int
+    progress: ChampProgress      # post-level-up state
+    is_lead: bool
+
+
+@dataclass(frozen=True)
 class EngageOutcome:
     fight: CampFightResult
     gold_awarded: int
@@ -29,19 +45,27 @@ class EngageOutcome:
     leveled_up_to: int | None
     champ_killed: Champion | None
     cooldown_seconds_set: int
+    champ_xp_awarded: int = 0                 # champ XP given to the lead
+    lead_progress: ChampProgress | None = None  # lead's post-fight progress
+    champ_levelups: tuple[ChampLevelUp, ...] = ()
 
 
 async def run_camp_engage(
     user: User,
     camp: CampSpec,
-    champ: Champion,
+    champ_entry: LoadoutEntry,
+    loadout: list[LoadoutEntry],
     rng: random.Random | None = None,
     reward_factor: float = 1.0,
 ) -> EngageOutcome:
     """Resolve a camp engagement. `reward_factor` (v3) scales win Gold/XP — it
     carries the backtracking decay so hunting an early region late pays less.
+
+    On a win the lead champion earns champ XP; the rest of the alive loadout
+    earns a small passive share. Champion levels are persisted here.
     """
     rng = rng or random
+    champ = champ_entry.champion
 
     # Consume red_buff_primed if present (+10% win pct). Manual activation
     # required — players prime via the /inventory button.
@@ -51,7 +75,10 @@ async def run_camp_engage(
         if await queries.consume_item(user.discord_id, "red_buff_primed", 1):
             red_buff_active = True
 
-    fight = resolve_camp_fight(champ, camp, red_buff=red_buff_active, rng=rng)
+    champ_bonus = progress_win_bonus(champ_entry.progress)
+    fight = resolve_camp_fight(
+        champ, camp, red_buff=red_buff_active, champ_bonus=champ_bonus, rng=rng
+    )
 
     if fight.won:
         scaled_gold = int(
@@ -67,6 +94,30 @@ async def run_camp_engage(
     final_drops: list[tuple[str, int]] = list(fight.drops)
     if fight.won:
         final_drops = await apply_camp_win_bonuses(user.discord_id, final_drops, rng=rng)
+
+    # Champion XP — win only. Lead gets the full share, the rest a small passive
+    # trickle (only while in the loadout, which `loadout` already guarantees).
+    lead_xp = round(camp.base_xp * HUNT_LEAD_FACTOR * reward_factor) if fight.won else 0
+    pass_xp = passive_xp(lead_xp, HUNT_PASSIVE_SHARE) if lead_xp else 0
+    champ_levelups: list[ChampLevelUp] = []
+    progress_writes: list[tuple[int, ChampProgress]] = []
+    lead_progress = champ_entry.progress
+    if fight.won:
+        for entry in loadout:
+            is_lead = entry.champion.id == champ.id
+            gain = lead_xp if is_lead else pass_xp
+            result = apply_champ_xp(entry.progress, entry.champion.tier, gain)
+            progress_writes.append((entry.champion.id, result.progress))
+            if is_lead:
+                lead_progress = result.progress
+            if result.levels_gained > 0:
+                champ_levelups.append(ChampLevelUp(
+                    champion=entry.champion,
+                    old_level=entry.progress.champ_level,
+                    new_level=result.progress.champ_level,
+                    progress=result.progress,
+                    is_lead=is_lead,
+                ))
 
     # Hunt cooldown is already set at /hunt-camp invocation to prevent spam;
     # we surface the existing remaining time for display.
@@ -84,6 +135,10 @@ async def run_camp_engage(
                 )
             for item_type, qty in final_drops:
                 await queries.add_item(user.discord_id, item_type, qty, conn=conn)
+            for champion_id, new_progress in progress_writes:
+                await queries.set_champ_progress(
+                    user.discord_id, champion_id, new_progress, conn=conn
+                )
             if fight.respawn_seconds > 0:
                 await queries.kill_champion(
                     user.discord_id, champ.id,
@@ -113,6 +168,9 @@ async def run_camp_engage(
         leveled_up_to=xp_result.leveled_up_to,
         champ_killed=champ if fight.respawn_seconds > 0 else None,
         cooldown_seconds_set=cd_remaining_display,
+        champ_xp_awarded=lead_xp,
+        lead_progress=lead_progress,
+        champ_levelups=tuple(champ_levelups),
     )
 
 
