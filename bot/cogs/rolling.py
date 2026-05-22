@@ -21,8 +21,19 @@ from bot.game.rolling import (
     pick_champion_in_tier,
     roll_champion,
 )
+from bot.game.world.regions import get_region, roll_tier_cap
 from bot.utils.decorators import register_user
 from bot.utils.embeds import TIER_NAME, failure_embed, info_embed, pull_embed
+
+
+def _region_cap_footer(region_key: str | None) -> str | None:
+    """Footer text noting the region roll cap, or None if uncapped (T7)."""
+    cap = roll_tier_cap(region_key)
+    if cap >= 7:
+        return None
+    region = get_region(region_key)
+    where = region.display if region else "your region"
+    return f"Rolls here cap at {TIER_NAME[cap]} (T{cap}) — {where}. Travel onward for higher tiers."
 
 log = logging.getLogger(__name__)
 
@@ -94,7 +105,8 @@ async def _do_single_roll(interaction: discord.Interaction) -> None:
                 await queries.add_gold(user_id, -cost, conn=conn)
 
     grouped = await _champs_by_tier()
-    result = roll_champion(1, grouped, prestige=user.prestige)
+    cap = roll_tier_cap(user.current_region)
+    result = roll_champion(1, grouped, prestige=user.prestige, max_tier=cap)
     final_champ, was_dupe, frag_qty, reap_to = await _resolve_pull(user_id, result.champion)
 
     if reap_to is not None:
@@ -107,8 +119,14 @@ async def _do_single_roll(interaction: discord.Interaction) -> None:
         return
 
     embed = pull_embed(final_champ, was_dupe=was_dupe, fragment_qty=frag_qty)
+    footer_parts = []
     if used_token:
-        embed.set_footer(text="Spent 1 Roll Token")
+        footer_parts.append("Spent 1 Roll Token")
+    cap_note = _region_cap_footer(user.current_region)
+    if cap_note:
+        footer_parts.append(cap_note)
+    if footer_parts:
+        embed.set_footer(text="  •  ".join(footer_parts))
     await interaction.response.send_message(embed=embed)
 
 
@@ -145,9 +163,10 @@ async def _do_bulk_rolls(interaction: discord.Interaction, n: int) -> None:
     reaped: list[tuple[Champion, int]] = []   # (champ, caster_id)
     all_pulled: list[Champion] = []
 
+    cap = roll_tier_cap(user.current_region)
     rng = random.Random()
     for _ in range(n):
-        result = roll_champion(1, grouped, prestige=user.prestige, rng=rng)
+        result = roll_champion(1, grouped, prestige=user.prestige, rng=rng, max_tier=cap)
         champ, was_dupe, _frag_qty, reap_to = await _resolve_pull(user_id, result.champion)
         all_pulled.append(champ)
         if reap_to is not None:
@@ -159,6 +178,9 @@ async def _do_bulk_rolls(interaction: discord.Interaction, n: int) -> None:
             new_champs.append(champ)
 
     embed = _bulk_roll_summary_embed(n, cost, new_champs, dupe_by_tier, reaped, all_pulled)
+    cap_note = _region_cap_footer(user.current_region)
+    if cap_note:
+        embed.set_footer(text=cap_note)
     await interaction.followup.send(embed=embed)
 
 
@@ -275,6 +297,21 @@ class Rolling(commands.Cog):
         if tier not in FRAGMENT_THRESHOLDS:
             await interaction.response.send_message(
                 embed=failure_embed("Tier must be between 1 and 6."), ephemeral=True
+            )
+            return
+
+        # Region roll cap also applies to fragment redemption.
+        user = await queries.get_user(interaction.user.id)
+        cap = roll_tier_cap(user.current_region if user else None)
+        if tier > cap:
+            region = get_region(user.current_region if user else None)
+            where = region.display if region else "this region"
+            await interaction.response.send_message(
+                embed=failure_embed(
+                    f"You can only redeem up to **{TIER_NAME[cap]}** fragments in "
+                    f"**{where}**. Travel onward to redeem Tier {tier}."
+                ),
+                ephemeral=True,
             )
             return
 

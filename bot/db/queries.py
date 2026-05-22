@@ -32,6 +32,8 @@ class User:
     starter_token_granted: bool
     last_loadout_swap: datetime | None
     ambient_events_opt_in: bool = False
+    current_region: str | None = None
+    adventure_started_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -128,6 +130,8 @@ def _row_to_user(row: asyncpg.Record) -> User:
         starter_token_granted=row["starter_token_granted"],
         last_loadout_swap=row["last_loadout_swap"],
         ambient_events_opt_in=row["ambient_events_opt_in"] if "ambient_events_opt_in" in keys else False,
+        current_region=row["current_region"] if "current_region" in keys else None,
+        adventure_started_at=row["adventure_started_at"] if "adventure_started_at" in keys else None,
     )
 
 
@@ -1052,6 +1056,99 @@ async def expire_old_reap_marks() -> int:
         return int(res.split()[-1])
     except (IndexError, ValueError):
         return 0
+
+
+# ----------------------------------------------------------------------------
+# Runeterra adventure (v3) — location, unlocked regions, goal progress
+# ----------------------------------------------------------------------------
+
+
+async def start_adventure(discord_id: int, region_key: str) -> None:
+    """Place a player into the world for the first time: set their location,
+    stamp adventure_started_at, and unlock their starting region. Idempotent
+    fields are fine to re-run, but callers should check adventure_started_at
+    first to avoid resetting an existing adventurer's region."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                UPDATE users
+                   SET current_region = $2,
+                       adventure_started_at = COALESCE(adventure_started_at, NOW())
+                 WHERE discord_id = $1
+                """,
+                discord_id, region_key,
+            )
+            await conn.execute(
+                """
+                INSERT INTO user_regions (user_id, region_key)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, region_key) DO NOTHING
+                """,
+                discord_id, region_key,
+            )
+
+
+async def set_current_region(discord_id: int, region_key: str) -> None:
+    await get_pool().execute(
+        "UPDATE users SET current_region = $2 WHERE discord_id = $1",
+        discord_id, region_key,
+    )
+
+
+async def unlock_region(discord_id: int, region_key: str) -> bool:
+    """Returns True if newly unlocked, False if it was already unlocked."""
+    val = await get_pool().fetchval(
+        """
+        INSERT INTO user_regions (user_id, region_key) VALUES ($1, $2)
+        ON CONFLICT (user_id, region_key) DO NOTHING
+        RETURNING 1
+        """,
+        discord_id, region_key,
+    )
+    return val is not None
+
+
+async def list_unlocked_regions(discord_id: int) -> list[str]:
+    rows = await get_pool().fetch(
+        "SELECT region_key FROM user_regions WHERE user_id = $1 ORDER BY unlocked_at",
+        discord_id,
+    )
+    return [r["region_key"] for r in rows]
+
+
+async def is_region_unlocked(discord_id: int, region_key: str) -> bool:
+    val = await get_pool().fetchval(
+        "SELECT 1 FROM user_regions WHERE user_id = $1 AND region_key = $2",
+        discord_id, region_key,
+    )
+    return val is not None
+
+
+async def get_goal_progress(discord_id: int, goal_key: str) -> int:
+    val = await get_pool().fetchval(
+        "SELECT progress FROM user_goal_progress WHERE user_id = $1 AND goal_key = $2",
+        discord_id, goal_key,
+    )
+    return val or 0
+
+
+async def incr_goal_progress(
+    discord_id: int, goal_key: str, amount: int = 1,
+    *, conn: asyncpg.Connection | None = None,
+) -> int:
+    """Add to a counter-style goal. Returns the new total."""
+    query = """
+        INSERT INTO user_goal_progress (user_id, goal_key, progress)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, goal_key)
+        DO UPDATE SET progress = user_goal_progress.progress + $3
+        RETURNING progress
+    """
+    if conn is not None:
+        return await conn.fetchval(query, discord_id, goal_key, amount)
+    return await get_pool().fetchval(query, discord_id, goal_key, amount)
 
 
 # ----------------------------------------------------------------------------

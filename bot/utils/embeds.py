@@ -376,6 +376,112 @@ def camp_result_embed(camp, champ, outcome) -> discord.Embed:
     return embed
 
 
+# --- Runeterra adventure embeds (v3) -----------------------------------------
+
+# Drop a hosted image of the map of Runeterra here to show it on
+# /start-adventure. Left blank ships a clean text map instead.
+RUNETERRA_MAP_URL = ""
+
+
+def _world_map_lines(current_key: str | None, unlocked: set[str]) -> list[str]:
+    """A compact text map: ✅ unlocked, 📍 current, 🔒 locked, danger band."""
+    from bot.game.world.regions import REGION_ORDER, WORLD, tier_band_label
+
+    lines: list[str] = []
+    for key in REGION_ORDER:
+        region = WORLD[key]
+        if region.hidden and key not in unlocked:
+            continue  # the Void stays secret until discovered
+        if key == current_key:
+            marker = "📍"
+        elif key in unlocked:
+            marker = "✅"
+        else:
+            marker = "🔒"
+        lines.append(f"{marker} **{region.display}** · {tier_band_label(region)}")
+    return lines
+
+
+def adventure_welcome_embed() -> discord.Embed:
+    """Onboarding card shown the first time a player runs /start-adventure."""
+    from bot.game.world.regions import get_region
+
+    bandle = get_region("bandle_city")
+    desc = (
+        "You awaken beneath the **Bandle Tree**, in the hidden dimension of "
+        "**Bandle City** — the kindest corner of all creation. Yordles bustle "
+        "around you. Somewhere far away, the rest of Runeterra is waiting.\n\n"
+        "**How your adventure works:**\n"
+        "• `/roll` champions — but only up to your **region's tier**. Bandle "
+        "City caps at **Tier 2**, so no day-one Legendaries.\n"
+        "• `/hunt-camp` the monsters of whatever region you're standing in.\n"
+        "• `/adventure` is your hub — track region goals, travel, and quests.\n"
+        "• Complete a region's **goals** to unlock travel to the next region.\n"
+        "• The deeper you go, the deadlier it gets — and the richer.\n\n"
+        f"_{bandle.blurb if bandle else ''}_"
+    )
+    embed = discord.Embed(
+        title="🌳 Your Adventure Begins — Bandle City",
+        description=desc,
+        color=0x8BC34A,
+    )
+    if RUNETERRA_MAP_URL:
+        embed.set_image(url=RUNETERRA_MAP_URL)
+    embed.set_footer(text="Run /adventure any time to see where you are.")
+    return embed
+
+
+def adventure_hub_embed(user: User, unlocked: list[str]) -> discord.Embed:
+    """The /adventure dashboard — current location, map, and what's reachable."""
+    from bot.game.world.regions import (
+        WORLD,
+        get_region,
+        roll_tier_cap,
+        tier_band_label,
+    )
+
+    unlocked_set = set(unlocked)
+    region = get_region(user.current_region)
+    if region is None:
+        return failure_embed("You have no location — run /start-adventure.")
+
+    cap = roll_tier_cap(region.key)
+    neighbor_lines: list[str] = []
+    for nb_key in region.neighbors:
+        nb = WORLD.get(nb_key)
+        if nb is None or (nb.hidden and nb_key not in unlocked_set):
+            continue
+        mark = "✅ unlocked" if nb_key in unlocked_set else "🔒 locked"
+        neighbor_lines.append(
+            f"• **{nb.display}** ({tier_band_label(nb)}) — {mark}"
+        )
+
+    embed = discord.Embed(
+        title=f"🧭 Adventure — 📍 {region.display}",
+        description=(
+            f"_{region.blurb}_\n\n"
+            f"**Danger band:** {tier_band_label(region)}  ·  "
+            f"**Roll cap:** Tier {cap}\n"
+            f"**Gold:** {user.gold:,}  ·  **Level:** {user.level}"
+        ),
+        color=0x3F51B5,
+    )
+    embed.add_field(
+        name="🗺 Connected regions",
+        value="\n".join(neighbor_lines) or "_none_",
+        inline=False,
+    )
+    embed.add_field(
+        name="🌍 Map of Runeterra",
+        value="\n".join(_world_map_lines(region.key, unlocked_set)),
+        inline=False,
+    )
+    embed.set_footer(
+        text="Travel, Quests & Region Actions arrive as the world is built out."
+    )
+    return embed
+
+
 # --- internals ---------------------------------------------------------------
 
 
