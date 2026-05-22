@@ -278,8 +278,14 @@ def trade_embed(trade: Trade, offered: Champion, requested: Champion) -> discord
 # --- PVE embeds --------------------------------------------------------------
 
 
-def encounter_embed(camp, champ, win_pct: float) -> discord.Embed:
-    """Pre-engage card with the camp + your best champ + win% preview."""
+def encounter_embed(
+    camp, champ, win_pct: float, *, opponent_splash: str | None = None
+) -> discord.Embed:
+    """Pre-engage card with the camp + your best champ + win% preview.
+
+    `opponent_splash` — for wild-champion encounters, the champion's splash art
+    is shown as the banner image.
+    """
     tier_color = TIER_COLOR.get(camp.tier, 0x607D8B)
     flavor = camp.flavor or f"You stumble upon **{camp.name}**."
     weakness_text = f" · weak to {camp.weak_to}" if camp.weak_to else ""
@@ -315,6 +321,8 @@ def encounter_embed(camp, champ, win_pct: float) -> discord.Embed:
     if champ is not None:
         from bot.utils.champion_images import tile_url
         embed.set_thumbnail(url=tile_url(champ.name))
+    if opponent_splash:
+        embed.set_image(url=opponent_splash)
     return embed
 
 
@@ -343,7 +351,9 @@ def world_boss_embed(boss, spec, top_strikers, you_dealt) -> discord.Embed:
     )
 
 
-def camp_result_embed(camp, champ, outcome) -> discord.Embed:
+def camp_result_embed(
+    camp, champ, outcome, *, opponent_splash: str | None = None
+) -> discord.Embed:
     """Post-engage result card."""
     fight = outcome.fight
     if fight.won:
@@ -373,6 +383,8 @@ def camp_result_embed(camp, champ, outcome) -> discord.Embed:
     embed = discord.Embed(title=title, description="\n".join(lines), color=color)
     from bot.utils.champion_images import tile_url
     embed.set_thumbnail(url=tile_url(champ.name))
+    if opponent_splash:
+        embed.set_image(url=opponent_splash)
     return embed
 
 

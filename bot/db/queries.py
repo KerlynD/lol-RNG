@@ -114,6 +114,21 @@ async def get_all_champions() -> list[Champion]:
     return [_row_to_champion(r) for r in rows]
 
 
+async def champions_in_regions(
+    regions: list[str], tier_min: int, tier_max: int
+) -> list[Champion]:
+    """Champions whose home region is one of `regions` and whose tier sits in
+    [tier_min, tier_max]. Used for v3 wild-champion encounters."""
+    rows = await get_pool().fetch(
+        """
+        SELECT * FROM champions
+         WHERE region = ANY($1::text[]) AND tier BETWEEN $2 AND $3
+        """,
+        regions, tier_min, tier_max,
+    )
+    return [_row_to_champion(r) for r in rows]
+
+
 # ----------------------------------------------------------------------------
 # Users
 # ----------------------------------------------------------------------------

@@ -167,6 +167,37 @@ def region_distance(a: str, b: str) -> int:
     return -1
 
 
+def furthest_region(unlocked: list[str]) -> str | None:
+    """The deepest (highest danger band) region a player has unlocked."""
+    best: str | None = None
+    for key in unlocked:
+        region = WORLD.get(key)
+        if region is None:
+            continue
+        if best is None or region.tier_max > WORLD[best].tier_max:
+            best = key
+    return best
+
+
+def reward_decay_factor(current_key: str | None, unlocked: list[str]) -> float:
+    """Backtracking penalty: hunting in a region far behind your progress pays
+    less. 1.0 at your frontier, decaying ~0.45 per travel-hop back, floored
+    at 0.10 (a region two-plus hops behind your furthest pays scraps).
+    """
+    current = get_region(current_key)
+    if current is None:
+        return 1.0
+    deepest = furthest_region(unlocked)
+    if deepest is None:
+        return 1.0
+    if current.tier_max >= WORLD[deepest].tier_max:
+        return 1.0  # at (or beyond) your frontier — full reward
+    hops = region_distance(current.key, deepest)
+    if hops <= 0:
+        return 1.0
+    return max(0.10, 1.0 - 0.45 * hops)
+
+
 def _validate_graph() -> None:
     """Module-load sanity check: every edge is bidirectional and well-formed."""
     for key, region in WORLD.items():
