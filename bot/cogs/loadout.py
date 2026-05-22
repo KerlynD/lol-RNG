@@ -247,21 +247,27 @@ class SlotSelect(discord.ui.Select):
         value = self.values[0]
         owner_id = self._parent_view.owner_id
 
-        # Pre-check the loadout swap cooldown.
         user = await queries.get_user(owner_id)
-        remaining = _swap_cooldown_remaining(user.last_loadout_swap)
-        if remaining > 0:
-            await interaction.response.send_message(
-                embed=failure_embed(
-                    f"Loadout swap is on cooldown — try again in {_format_seconds(remaining)}."
-                ),
-                ephemeral=True,
-            )
-            return
+        current_loadout = await queries.get_loadout(owner_id)
+        cap = unlocks_for(user.level).loadout_slots
+        # The swap cooldown only bites when the loadout is already full —
+        # filling open slots (e.g. building a fresh loadout) is always free.
+        loadout_full = len(current_loadout) >= cap
+
+        if loadout_full:
+            remaining = _swap_cooldown_remaining(user.last_loadout_swap)
+            if remaining > 0:
+                await interaction.response.send_message(
+                    embed=failure_embed(
+                        f"Loadout swap is on cooldown — try again in {_format_seconds(remaining)}."
+                    ),
+                    ephemeral=True,
+                )
+                return
 
         if value == "empty":
             cleared = await queries.clear_loadout_slot(owner_id, self._slot)
-            if cleared:
+            if cleared and loadout_full:
                 await queries.stamp_loadout_swap(owner_id)
             msg = f"Slot {self._slot} cleared." if cleared else f"Slot {self._slot} was already empty."
         else:
@@ -279,13 +285,13 @@ class SlotSelect(discord.ui.Select):
                 )
                 return
             # If the champion is in another slot, move it (clear old slot first).
-            current_loadout = await queries.get_loadout(owner_id)
             for entry in current_loadout:
                 if entry.champion.id == champ_id and entry.slot != self._slot:
                     await queries.clear_loadout_slot(owner_id, entry.slot)
                     break
             await queries.set_loadout_slot(owner_id, self._slot, champ_id)
-            await queries.stamp_loadout_swap(owner_id)
+            if loadout_full:
+                await queries.stamp_loadout_swap(owner_id)
             champ = await queries.get_champion_by_id(champ_id)
             msg = f"Equipped **{champ.name}** to slot {self._slot}."
 
