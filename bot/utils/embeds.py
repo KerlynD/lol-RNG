@@ -518,6 +518,65 @@ def adventure_hub_embed(
     return embed
 
 
+def quest_panel_embed(region_key: str, quest_states: list) -> discord.Embed:
+    """The /adventure → Quests panel. `quest_states` is a list of
+    (quest, status, current, target) tuples."""
+    from bot.game.world.regions import get_region
+
+    region = get_region(region_key)
+    display = region.display if region else region_key
+    embed = discord.Embed(
+        title=f"📜 Quests — {display}",
+        description=(
+            "Champion-given missions for this region. Accept a quest, complete "
+            "its objective, then return here to claim your reward."
+            if quest_states else "_No quests available in this region._"
+        ),
+        color=0x9C27B0,
+    )
+    for quest, status, current, target in quest_states:
+        if status == "completed":
+            mark, tail = "✅", "**Completed.**"
+        elif status == "active":
+            done = current >= target
+            mark = "🎁" if done else "⏳"
+            tail = (
+                "**Objective complete — claim your reward!**"
+                if done else f"Progress: **{min(current, target)}/{target}**"
+            )
+        else:
+            mark, tail = "•", "_Not yet accepted._"
+        reward = f"💰 {quest.reward_gold:,} Gold · ✨ {quest.reward_xp:,} XP"
+        if quest.reward_item:
+            reward += f" · {ITEM_LABELS.get(quest.reward_item, quest.reward_item)} ×{quest.reward_item_qty}"
+        embed.add_field(
+            name=f"{mark} {quest.title} — {quest.giver}",
+            value=f"{quest.description}\n**Objective:** {quest.objective_label}\n{tail}\n**Reward:** {reward}",
+            inline=False,
+        )
+    return embed
+
+
+def quest_complete_embed(quest) -> discord.Embed:
+    """Story beat shown when a quest is claimed — the giver's splash + rewards."""
+    from bot.utils.champion_images import splash_url
+
+    reward = f"💰 **{quest.reward_gold:,}** Gold\n✨ **{quest.reward_xp:,}** XP"
+    if quest.reward_item:
+        reward += (
+            f"\n🎁 **{ITEM_LABELS.get(quest.reward_item, quest.reward_item)} "
+            f"×{quest.reward_item_qty}**"
+        )
+    embed = discord.Embed(
+        title=f"📜 Quest Complete — {quest.title}",
+        description=f"**{quest.giver}** thanks you.\n\n{reward}",
+        color=0x4CAF50,
+    )
+    embed.set_image(url=splash_url(quest.giver))
+    embed.set_author(name=quest.giver)
+    return embed
+
+
 def region_arrival_embed(region_key: str) -> discord.Embed:
     """Story beat shown the first time a player unlocks/enters a region — a
     greeting champion with their splash art."""

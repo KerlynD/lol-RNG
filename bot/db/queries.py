@@ -1175,6 +1175,80 @@ async def incr_goal_progress(
     return await get_pool().fetchval(query, discord_id, goal_key, amount)
 
 
+async def set_goal_progress(discord_id: int, goal_key: str, value: int) -> None:
+    """Overwrite a goal counter (used to snapshot quest baselines)."""
+    await get_pool().execute(
+        """
+        INSERT INTO user_goal_progress (user_id, goal_key, progress)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, goal_key) DO UPDATE SET progress = EXCLUDED.progress
+        """,
+        discord_id, goal_key, value,
+    )
+
+
+# ----------------------------------------------------------------------------
+# Region quests (v3 Phase 4)
+# ----------------------------------------------------------------------------
+
+
+async def accept_quest(
+    discord_id: int,
+    quest_key: str,
+    baseline_key: str | None = None,
+    baseline_value: int = 0,
+) -> bool:
+    """Pick up a quest. Returns False if it was already accepted/completed.
+    `baseline_key` snapshots a cumulative counter so progress counts from now."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            val = await conn.fetchval(
+                """
+                INSERT INTO user_quests (user_id, quest_key) VALUES ($1, $2)
+                ON CONFLICT (user_id, quest_key) DO NOTHING
+                RETURNING 1
+                """,
+                discord_id, quest_key,
+            )
+            if val is None:
+                return False
+            if baseline_key is not None:
+                await conn.execute(
+                    """
+                    INSERT INTO user_goal_progress (user_id, goal_key, progress)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (user_id, goal_key)
+                    DO UPDATE SET progress = EXCLUDED.progress
+                    """,
+                    discord_id, baseline_key, baseline_value,
+                )
+            return True
+
+
+async def list_user_quests(discord_id: int) -> dict[str, str]:
+    """quest_key -> status ('active' | 'completed')."""
+    rows = await get_pool().fetch(
+        "SELECT quest_key, status FROM user_quests WHERE user_id = $1",
+        discord_id,
+    )
+    return {r["quest_key"]: r["status"] for r in rows}
+
+
+async def complete_quest(discord_id: int, quest_key: str) -> bool:
+    """Mark an active quest completed. Returns True only on the transition."""
+    val = await get_pool().fetchval(
+        """
+        UPDATE user_quests
+           SET status = 'completed', completed_at = NOW()
+         WHERE user_id = $1 AND quest_key = $2 AND status = 'active'
+         RETURNING 1
+        """,
+        discord_id, quest_key,
+    )
+    return val is not None
+
+
 # ----------------------------------------------------------------------------
 # Smoke test (kept for /dbcheck)
 # ----------------------------------------------------------------------------
