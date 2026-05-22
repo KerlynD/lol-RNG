@@ -10,6 +10,7 @@ from bot.config import Settings
 from bot.db import migrate, pool
 from bot.tasks import ambient_events as ambient_events_task
 from bot.tasks import world_boss_scheduler as world_boss_task
+from bot.tasks.ranked_decay import decay_inactive_ranked
 from bot.tasks.reap_expiry import sweep_expired_reap_marks
 from bot.tasks.trade_expiry import sweep_expired_trades
 
@@ -58,6 +59,7 @@ class LolRngBot(commands.Bot):
 
         sweep_expired_trades.start()
         sweep_expired_reap_marks.start()
+        decay_inactive_ranked.start()
         world_boss_task.attach_bot(self)
         ambient_events_task.attach_bot(self)
         world_boss_task.sweep_and_maybe_spawn.start()
@@ -69,6 +71,7 @@ class LolRngBot(commands.Bot):
             for loop_task in (
                 sweep_expired_trades,
                 sweep_expired_reap_marks,
+                decay_inactive_ranked,
                 world_boss_task.sweep_and_maybe_spawn,
                 ambient_events_task.spawn_ambient_events,
             ):

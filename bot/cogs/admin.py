@@ -32,6 +32,35 @@ class Admin(commands.Cog):
             f"DB OK. Champions seeded: **{count}**.", ephemeral=True
         )
 
+    @app_commands.command(
+        name="season-reset",
+        description="End the ranked season — wipes all LP and restarts placements (admin only).",
+    )
+    @app_commands.describe(confirm="Set to True to confirm. This is irreversible.")
+    async def season_reset(
+        self, interaction: discord.Interaction, confirm: bool = False
+    ) -> None:
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not perms.administrator:
+            await interaction.response.send_message(
+                "You need the **Administrator** permission to reset the season.",
+                ephemeral=True,
+            )
+            return
+        if not confirm:
+            await interaction.response.send_message(
+                "This ends the current ranked season, wipes **every** player's LP, "
+                "and forces a new round of placements. Re-run with `confirm: True` "
+                "to proceed.",
+                ephemeral=True,
+            )
+            return
+        new_id = await queries.reset_season()
+        await interaction.response.send_message(
+            f"🏁 Ranked season reset — **Season {new_id}** has begun. "
+            "All players must replay their placement matches."
+        )
+
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Admin(bot))

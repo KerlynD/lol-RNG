@@ -1061,3 +1061,209 @@ async def expire_old_reap_marks() -> int:
 
 async def champion_count() -> int:
     return await get_pool().fetchval("SELECT COUNT(*) FROM champions")
+
+
+# ----------------------------------------------------------------------------
+# Ranked PvP — seasons, ladder profiles, match log
+# ----------------------------------------------------------------------------
+
+
+@dataclass
+class RankedProfile:
+    """Per-player ranked ladder state. Mutable — ranked_flow adjusts fields
+    in place between load and save_ranked_profile()."""
+    user_id: int
+    season_id: int
+    lp: int
+    hidden_mmr: int
+    placement_games: int
+    placement_wins: int
+    wins: int
+    losses: int
+    win_streak: int
+    loss_streak: int
+    last_ranked_attack_at: datetime | None
+    last_decay_at: datetime | None
+    created_at: datetime
+
+    @property
+    def in_placements(self) -> bool:
+        return self.placement_games < 5
+
+
+def _row_to_ranked_profile(row: asyncpg.Record) -> RankedProfile:
+    return RankedProfile(
+        user_id=row["user_id"],
+        season_id=row["season_id"],
+        lp=row["lp"],
+        hidden_mmr=row["hidden_mmr"],
+        placement_games=row["placement_games"],
+        placement_wins=row["placement_wins"],
+        wins=row["wins"],
+        losses=row["losses"],
+        win_streak=row["win_streak"],
+        loss_streak=row["loss_streak"],
+        last_ranked_attack_at=row["last_ranked_attack_at"],
+        last_decay_at=row["last_decay_at"],
+        created_at=row["created_at"],
+    )
+
+
+async def current_season_id(*, conn: asyncpg.Connection | None = None) -> int:
+    """Id of the open season. Opens one defensively if none exists."""
+    executor = conn or get_pool()
+    sid = await executor.fetchval(
+        "SELECT id FROM seasons WHERE ended_at IS NULL ORDER BY id DESC LIMIT 1"
+    )
+    if sid is None:
+        sid = await executor.fetchval(
+            "INSERT INTO seasons (started_at) VALUES (NOW()) RETURNING id"
+        )
+    return sid
+
+
+async def get_ranked_profile(user_id: int) -> RankedProfile | None:
+    row = await get_pool().fetchrow(
+        "SELECT * FROM ranked_profiles WHERE user_id = $1", user_id
+    )
+    return _row_to_ranked_profile(row) if row else None
+
+
+async def ensure_ranked_profile(
+    user_id: int, *, conn: asyncpg.Connection | None = None
+) -> RankedProfile:
+    """Fetch or create the caller's ranked profile. The user row must exist."""
+    executor = conn or get_pool()
+    row = await executor.fetchrow(
+        "SELECT * FROM ranked_profiles WHERE user_id = $1", user_id
+    )
+    if row is not None:
+        return _row_to_ranked_profile(row)
+    season = await current_season_id(conn=conn)
+    row = await executor.fetchrow(
+        """
+        INSERT INTO ranked_profiles (user_id, season_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id) DO UPDATE SET user_id = ranked_profiles.user_id
+        RETURNING *
+        """,
+        user_id, season,
+    )
+    return _row_to_ranked_profile(row)
+
+
+async def save_ranked_profile(
+    p: RankedProfile, *, conn: asyncpg.Connection | None = None
+) -> None:
+    query = """
+        UPDATE ranked_profiles SET
+            season_id = $2, lp = $3, hidden_mmr = $4,
+            placement_games = $5, placement_wins = $6,
+            wins = $7, losses = $8, win_streak = $9, loss_streak = $10,
+            last_ranked_attack_at = $11, last_decay_at = $12
+         WHERE user_id = $1
+    """
+    args = (
+        p.user_id, p.season_id, p.lp, p.hidden_mmr, p.placement_games,
+        p.placement_wins, p.wins, p.losses, p.win_streak, p.loss_streak,
+        p.last_ranked_attack_at, p.last_decay_at,
+    )
+    executor = conn or get_pool()
+    await executor.execute(query, *args)
+
+
+async def log_ranked_match(
+    season_id: int,
+    attacker_id: int,
+    defender_id: int,
+    attacker_won: bool,
+    attacker_lp_delta: int,
+    defender_lp_delta: int,
+    *,
+    conn: asyncpg.Connection | None = None,
+) -> None:
+    query = """
+        INSERT INTO ranked_matches
+            (season_id, attacker_id, defender_id, attacker_won,
+             attacker_lp_delta, defender_lp_delta)
+        VALUES ($1, $2, $3, $4, $5, $6)
+    """
+    executor = conn or get_pool()
+    await executor.execute(
+        query, season_id, attacker_id, defender_id, attacker_won,
+        attacker_lp_delta, defender_lp_delta,
+    )
+
+
+async def count_ranked_attacks_by(attacker_id: int, hours: int = 24) -> int:
+    """Ranked matches this player has *initiated* in the window (daily cap)."""
+    val = await get_pool().fetchval(
+        """
+        SELECT COUNT(*) FROM ranked_matches
+         WHERE attacker_id = $1 AND created_at > NOW() - ($2 || ' hours')::interval
+        """,
+        attacker_id, str(hours),
+    )
+    return val or 0
+
+
+async def top_ranked_profiles(limit: int = 10) -> list[RankedProfile]:
+    """Highest-LP players who have finished placements."""
+    rows = await get_pool().fetch(
+        """
+        SELECT * FROM ranked_profiles
+         WHERE placement_games >= 5
+         ORDER BY lp DESC, wins DESC
+         LIMIT $1
+        """,
+        limit,
+    )
+    return [_row_to_ranked_profile(r) for r in rows]
+
+
+async def run_ranked_decay(
+    floor_lp: int, decay_lp: int, min_tier_lp: int, inactivity_days: int
+) -> list[tuple[int, int]]:
+    """Apply one inactivity-decay tick. Returns (user_id, new_lp) for each
+    profile that decayed. Idempotent within 24h via the last_decay_at guard."""
+    rows = await get_pool().fetch(
+        """
+        UPDATE ranked_profiles
+           SET lp = GREATEST($1, lp - $2),
+               last_decay_at = NOW()
+         WHERE placement_games >= 5
+           AND lp >= $3
+           AND COALESCE(last_ranked_attack_at, created_at)
+               < NOW() - ($4 || ' days')::interval
+           AND (last_decay_at IS NULL
+                OR last_decay_at < NOW() - INTERVAL '24 hours')
+        RETURNING user_id, lp
+        """,
+        floor_lp, decay_lp, min_tier_lp, str(inactivity_days),
+    )
+    return [(r["user_id"], r["lp"]) for r in rows]
+
+
+async def reset_season() -> int:
+    """Close the open season, open a new one, and wipe every ladder profile to
+    placements. hidden_mmr is deliberately preserved across the reset."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE seasons SET ended_at = NOW() WHERE ended_at IS NULL"
+            )
+            new_id = await conn.fetchval(
+                "INSERT INTO seasons (started_at) VALUES (NOW()) RETURNING id"
+            )
+            await conn.execute(
+                """
+                UPDATE ranked_profiles SET
+                    season_id = $1, lp = 0,
+                    placement_games = 0, placement_wins = 0,
+                    wins = 0, losses = 0, win_streak = 0, loss_streak = 0,
+                    last_ranked_attack_at = NULL, last_decay_at = NULL
+                """,
+                new_id,
+            )
+    return new_id

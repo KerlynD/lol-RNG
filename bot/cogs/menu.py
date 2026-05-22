@@ -89,6 +89,10 @@ class Menu(commands.Cog):
             LEVEL_LOCKED: [],
         }
         for spec in ACTIONS.values():
+            # PvP-triggering actions live on the /attack panel, not as their
+            # own commands — surfaced under "PvP status" instead.
+            if spec.triggers_pvp:
+                continue
             av = check_eligibility(spec, user.level, loadout, cooldowns)
             buckets[av.status].append(av)
 
@@ -279,7 +283,10 @@ class Menu(commands.Cog):
             ),
         ]
         if len(loadout) > 0:
-            pvp_lines.append("Use `/attack @user` to challenge a player (best-of-3 skirmish).")
+            pvp_lines.append(
+                "Use `/attack @user` to open the attack panel — ranked match, "
+                "unranked duel, prank, heist & raid. Check `/rank` for your LP."
+            )
         else:
             pvp_lines.append("_You need at least one equipped champion to attack._")
         embed.add_field(name="⚔ PvP status", value="\n".join(pvp_lines), inline=False)

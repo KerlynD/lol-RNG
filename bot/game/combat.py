@@ -251,9 +251,11 @@ def simulate_skirmish(
     defender_prestige: int = 0,
     attacker_power_multiplier: float = 1.0,
     defender_shields: dict[str, int] | None = None,
+    best_of: int = 3,
     rng: random.Random | None = None,
 ) -> SkirmishResult:
-    """Best-of-3. Shields are consumed in place from the passed-in dict.
+    """Best-of-`best_of` skirmish (use best_of=1 for a single-round duel).
+    Shields are consumed in place from the passed-in dict.
 
     `attacker_power_multiplier` lets buffs (e.g. red_buff) inflate the
     attacker's effective Power without touching combat math elsewhere.
@@ -262,9 +264,12 @@ def simulate_skirmish(
         raise ValueError("Attacker has no equipped champions.")
     if not defender_loadout:
         raise ValueError("Defender has no equipped champions.")
+    if best_of < 1:
+        raise ValueError("best_of must be at least 1.")
 
     rng = rng or random
     shields = dict(defender_shields or {})
+    rounds_to_win = best_of // 2 + 1
 
     used_attackers: set[int] = set()
     used_defenders: set[int] = set()
@@ -272,7 +277,7 @@ def simulate_skirmish(
     a_wins = 0
     d_wins = 0
 
-    for _ in range(3):
+    for _ in range(best_of):
         a_champ = _pick_attacker_champ(
             attacker_loadout, used_attackers, attacker_level, attacker_prestige
         ) or attacker_loadout[0].champion
@@ -298,7 +303,7 @@ def simulate_skirmish(
             a_wins += 1
         else:
             d_wins += 1
-        if a_wins == 2 or d_wins == 2:
+        if a_wins >= rounds_to_win or d_wins >= rounds_to_win:
             break
 
     # Mutate the caller's dict so they know what was consumed.

@@ -1,7 +1,7 @@
-"""Actions cog — every PRD action command, wired through the registry runner.
+"""Actions cog — the solo PRD action commands, wired through the registry runner.
 
-Single command per action key; PvP-triggering actions also resolve a skirmish
-via bot.game.pvp_flow.
+One command per action key. PvP-triggering actions (prank, duel, heist, raid)
+are not commands here — they are buttons on the /attack panel (bot/cogs/pvp.py).
 """
 from __future__ import annotations
 
@@ -12,15 +12,13 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
-from bot.game.actions.registry import ACTIONS, ActionSpec
+from bot.game.actions.registry import ACTIONS
 from bot.game.actions.runner import ActionFailure, ActionSuccess, run_action
-from bot.game.pvp_flow import attempt_pvp, check_pvp_eligibility
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
     action_result_embed,
     cooldown_embed,
     failure_embed,
-    skirmish_embeds,
 )
 
 log = logging.getLogger(__name__)
@@ -35,10 +33,9 @@ SOLO_ACTION_KEYS = (
     "void-incursion", "celestial-gaze", "freljord-storm", "judgment",  # T5
 )
 
-PVP_ACTION_KEYS = (
-    "prank", "duel",            # T2
-    "heist-piltover", "raid-noxus",  # T3
-)
+# PvP-triggering actions (prank, duel, heist-piltover, raid-noxus) are no
+# longer standalone commands — they are buttons on the /attack panel in
+# bot/cogs/pvp.py. Their ActionSpecs still live in the registry.
 
 
 async def _run_and_reply(interaction: discord.Interaction, key: str) -> ActionSuccess | None:
@@ -172,109 +169,6 @@ class Actions(commands.Cog):
         result = await _run_and_reply(interaction, "judgment")
         if result is not None:
             await interaction.response.send_message(embed=action_result_embed(result))
-
-    # ----- PvP-triggering actions (require @target) --------------------------
-
-    @app_commands.command(name="prank", description=ACTIONS["prank"].description)
-    @app_commands.describe(target="Who to prank.")
-    @register_user
-    async def prank(self, interaction: discord.Interaction, target: discord.Member) -> None:
-        await self._pvp_action(interaction, "prank", target, stake_pct=0.03)
-
-    @app_commands.command(name="duel", description=ACTIONS["duel"].description)
-    @app_commands.describe(target="Who to duel.")
-    @register_user
-    async def duel(self, interaction: discord.Interaction, target: discord.Member) -> None:
-        await self._pvp_action(interaction, "duel", target, stake_pct=0.05)
-
-    @app_commands.command(name="heist-piltover", description=ACTIONS["heist-piltover"].description)
-    @app_commands.describe(target="Heist target.")
-    @register_user
-    async def heist_piltover(self, interaction: discord.Interaction, target: discord.Member) -> None:
-        await self._pvp_action(interaction, "heist-piltover", target, stake_pct=0.12)
-
-    @app_commands.command(name="raid-noxus", description=ACTIONS["raid-noxus"].description)
-    @app_commands.describe(target="Raid target.")
-    @register_user
-    async def raid_noxus(self, interaction: discord.Interaction, target: discord.Member) -> None:
-        await self._pvp_action(interaction, "raid-noxus", target, stake_pct=0.15)
-
-    async def _pvp_action(
-        self,
-        interaction: discord.Interaction,
-        key: str,
-        target: discord.Member,
-        stake_pct: float,
-    ) -> None:
-        if target.bot:
-            await interaction.response.send_message(
-                embed=failure_embed("You can't target a bot."), ephemeral=True
-            )
-            return
-
-        # PRE-CHECK PvP target FIRST — if the target is immune/rested/no-champ,
-        # we abort the WHOLE command. The action doesn't fire, no Gold/XP gets
-        # paid, no cooldown is set. Single failure embed, no double-message.
-        reason, _status = await check_pvp_eligibility(interaction.user.id, target.id)
-        if reason is not None:
-            # Tailor messages for the most common cases for nicer copy.
-            if _status == "immune":
-                msg = f"{target.display_name} is wreathed in Lamb's Respite. Untouchable."
-            elif _status == "capped":
-                msg = f"{target.display_name} is rested — no more attacks today."
-            elif _status == "no_defender":
-                msg = f"{target.display_name} has no alive champion equipped."
-            elif _status == "no_attacker":
-                msg = "You have no alive champion equipped — check `/menu` for revive timers."
-            else:
-                msg = reason
-            await interaction.response.send_message(
-                embed=failure_embed(msg), ephemeral=True
-            )
-            return
-
-        # Eligibility confirmed — run the action.
-        user = await queries.get_user(interaction.user.id)
-        action_result = await run_action(user, key)
-        if isinstance(action_result, ActionFailure):
-            spec = ACTIONS[key]
-            if action_result.seconds_remaining is not None:
-                embed = cooldown_embed(spec.name, action_result.seconds_remaining)
-            else:
-                embed = failure_embed(action_result.reason)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        await interaction.response.send_message(embed=action_result_embed(action_result))
-
-        # Resolve PvP layer. Things can still go sideways (kindred_passive
-        # auto-tie, or the target became immune between the precheck and now),
-        # but those are rare and the user already saw the action result.
-        outcome = await attempt_pvp(interaction.user.id, target.id, gold_stake_pct=stake_pct)
-        if outcome.error:
-            await interaction.followup.send(embed=failure_embed(outcome.error))
-            return
-        if outcome.immune or outcome.capped:
-            # Edge: defender's state changed between precheck and execution.
-            await interaction.followup.send(
-                embed=failure_embed(
-                    f"{target.display_name} slipped away before the strike landed."
-                )
-            )
-            return
-        if outcome.auto_tied:
-            await interaction.followup.send(
-                embed=failure_embed(
-                    f"{target.display_name}'s Kindred passive triggers — neither of you wins this exchange."
-                )
-            )
-            return
-
-        await interaction.followup.send(
-            embeds=skirmish_embeds(
-                interaction.user, target, outcome.skirmish, outcome.gold_transferred
-            )
-        )
 
 
 async def setup(bot: commands.Bot) -> None:
