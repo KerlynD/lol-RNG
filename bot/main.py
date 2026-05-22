@@ -13,11 +13,13 @@ from bot.tasks import world_boss_scheduler as world_boss_task
 from bot.tasks.ranked_decay import decay_inactive_ranked
 from bot.tasks.reap_expiry import sweep_expired_reap_marks
 from bot.tasks.trade_expiry import sweep_expired_trades
+from bot.utils.gating import AdventureGatedTree
 
 log = logging.getLogger("lol-rng")
 
 COGS = (
     "bot.cogs.admin",
+    "bot.cogs.adventure",
     "bot.cogs.menu",
     "bot.cogs.rolling",
     "bot.cogs.inventory",
@@ -38,7 +40,10 @@ class LolRngBot(commands.Bot):
     def __init__(self, settings: Settings):
         intents = discord.Intents.default()
         intents.message_content = False
-        super().__init__(command_prefix="!", intents=intents)
+        # Custom tree gates every game command behind /start-adventure.
+        super().__init__(
+            command_prefix="!", intents=intents, tree_cls=AdventureGatedTree
+        )
         self.settings = settings
 
     async def setup_hook(self) -> None:

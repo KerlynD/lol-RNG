@@ -90,11 +90,23 @@ def pick_tier(
     multiplier: int,
     prestige: int = 0,
     rng: random.Random | None = None,
+    max_tier: int | None = None,
 ) -> int:
+    """Pick a champion tier for a roll.
+
+    `max_tier` is the region roll cap (v3): you can't roll above the tier band
+    of the region you're standing in. If the multiplier's guaranteed-minimum
+    tier sits entirely above the cap, the roll is clamped down to `max_tier`.
+    """
     if multiplier not in TIER_WEIGHTS_BY_MULTIPLIER:
         raise ValueError(f"Unsupported multiplier {multiplier}; expected {VALID_MULTIPLIERS}")
     rng = rng or random
     weights = _apply_prestige_to_weights(TIER_WEIGHTS_BY_MULTIPLIER[multiplier], prestige)
+    if max_tier is not None:
+        weights = {t: w for t, w in weights.items() if t <= max_tier}
+        if not weights or sum(weights.values()) <= 0:
+            # Every weighted tier is above the region cap — clamp to the cap.
+            return max_tier
     tiers = list(weights.keys())
     probs = [weights[t] for t in tiers]
     total = sum(probs)
@@ -120,14 +132,16 @@ def roll_champion(
     champions_by_tier: dict[int, list[Champion]],
     prestige: int = 0,
     rng: random.Random | None = None,
+    max_tier: int | None = None,
 ) -> RollResult:
     """End-to-end roll: pick a tier, then pick a champion within that tier.
 
     Falls back to next-lower tier if the chosen tier has no champions seeded
-    (defensive — should never happen with the full roster).
+    (defensive — should never happen with the full roster). `max_tier` is the
+    region roll cap (v3) — see `pick_tier`.
     """
     rng = rng or random
-    tier = pick_tier(multiplier, prestige=prestige, rng=rng)
+    tier = pick_tier(multiplier, prestige=prestige, rng=rng, max_tier=max_tier)
     # Fallback in case a tier is empty:
     pool_tiers = sorted((t for t, c in champions_by_tier.items() if c), reverse=True)
     if tier not in champions_by_tier or not champions_by_tier[tier]:

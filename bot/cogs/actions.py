@@ -1,7 +1,10 @@
-"""Actions cog — the solo PRD action commands, wired through the registry runner.
+"""Actions cog — the global economy commands.
 
-One command per action key. PvP-triggering actions (prank, duel, heist, raid)
-are not commands here — they are buttons on the /attack panel (bot/cogs/pvp.py).
+v3 folded the region/faction solo actions (forage, tinker, patrol-demacia,
+ascend, …) into the /adventure → Region Actions panel, and the PvP-triggering
+raids (prank, duel, heist, raid) into the /attack panel (bot/cogs/pvp.py).
+What remains here is the global economy floor — /work, /beg, /daily — which
+needs no region and no @target. All still flow through run_action.
 """
 from __future__ import annotations
 
@@ -24,20 +27,6 @@ from bot.utils.embeds import (
 log = logging.getLogger(__name__)
 
 
-# Action keys for the action commands defined in this cog (no god/death; those are in a separate cog).
-SOLO_ACTION_KEYS = (
-    "work", "beg", "daily",                                        # T1
-    "forage", "tinker",                                            # T2 solo
-    "patrol-demacia", "meditate-ionia", "hunt-shadowisles",        # T3 solo
-    "ascend", "darkin-pact", "defend-targon", "void-touch",        # T4
-    "void-incursion", "celestial-gaze", "freljord-storm", "judgment",  # T5
-)
-
-# PvP-triggering actions (prank, duel, heist-piltover, raid-noxus) are no
-# longer standalone commands — they are buttons on the /attack panel in
-# bot/cogs/pvp.py. Their ActionSpecs still live in the registry.
-
-
 async def _run_and_reply(interaction: discord.Interaction, key: str) -> ActionSuccess | None:
     user = await queries.get_user(interaction.user.id)
     result = await run_action(user, key)
@@ -55,8 +44,6 @@ async def _run_and_reply(interaction: discord.Interaction, key: str) -> ActionSu
 class Actions(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    # ----- Solo (no @target) -------------------------------------------------
 
     @app_commands.command(name="work", description=ACTIONS["work"].description)
     @register_user
@@ -76,97 +63,6 @@ class Actions(commands.Cog):
     @register_user
     async def daily(self, interaction: discord.Interaction) -> None:
         result = await _run_and_reply(interaction, "daily")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="forage", description=ACTIONS["forage"].description)
-    @register_user
-    async def forage(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "forage")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="tinker", description=ACTIONS["tinker"].description)
-    @register_user
-    async def tinker(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "tinker")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="patrol-demacia", description=ACTIONS["patrol-demacia"].description)
-    @register_user
-    async def patrol_demacia(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "patrol-demacia")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="meditate-ionia", description=ACTIONS["meditate-ionia"].description)
-    @register_user
-    async def meditate_ionia(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "meditate-ionia")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="hunt-shadowisles", description=ACTIONS["hunt-shadowisles"].description)
-    @register_user
-    async def hunt_shadowisles(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "hunt-shadowisles")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="ascend", description=ACTIONS["ascend"].description)
-    @register_user
-    async def ascend(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "ascend")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="darkin-pact", description=ACTIONS["darkin-pact"].description)
-    @register_user
-    async def darkin_pact(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "darkin-pact")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="defend-targon", description=ACTIONS["defend-targon"].description)
-    @register_user
-    async def defend_targon(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "defend-targon")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="void-touch", description=ACTIONS["void-touch"].description)
-    @register_user
-    async def void_touch(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "void-touch")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="void-incursion", description=ACTIONS["void-incursion"].description)
-    @register_user
-    async def void_incursion(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "void-incursion")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="celestial-gaze", description=ACTIONS["celestial-gaze"].description)
-    @register_user
-    async def celestial_gaze(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "celestial-gaze")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="freljord-storm", description=ACTIONS["freljord-storm"].description)
-    @register_user
-    async def freljord_storm(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "freljord-storm")
-        if result is not None:
-            await interaction.response.send_message(embed=action_result_embed(result))
-
-    @app_commands.command(name="judgment", description=ACTIONS["judgment"].description)
-    @register_user
-    async def judgment(self, interaction: discord.Interaction) -> None:
-        result = await _run_and_reply(interaction, "judgment")
         if result is not None:
             await interaction.response.send_message(embed=action_result_embed(result))
 

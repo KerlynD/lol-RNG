@@ -32,6 +32,8 @@ class User:
     starter_token_granted: bool
     last_loadout_swap: datetime | None
     ambient_events_opt_in: bool = False
+    current_region: str | None = None
+    adventure_started_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +114,21 @@ async def get_all_champions() -> list[Champion]:
     return [_row_to_champion(r) for r in rows]
 
 
+async def champions_in_regions(
+    regions: list[str], tier_min: int, tier_max: int
+) -> list[Champion]:
+    """Champions whose home region is one of `regions` and whose tier sits in
+    [tier_min, tier_max]. Used for v3 wild-champion encounters."""
+    rows = await get_pool().fetch(
+        """
+        SELECT * FROM champions
+         WHERE region = ANY($1::text[]) AND tier BETWEEN $2 AND $3
+        """,
+        regions, tier_min, tier_max,
+    )
+    return [_row_to_champion(r) for r in rows]
+
+
 # ----------------------------------------------------------------------------
 # Users
 # ----------------------------------------------------------------------------
@@ -128,6 +145,8 @@ def _row_to_user(row: asyncpg.Record) -> User:
         starter_token_granted=row["starter_token_granted"],
         last_loadout_swap=row["last_loadout_swap"],
         ambient_events_opt_in=row["ambient_events_opt_in"] if "ambient_events_opt_in" in keys else False,
+        current_region=row["current_region"] if "current_region" in keys else None,
+        adventure_started_at=row["adventure_started_at"] if "adventure_started_at" in keys else None,
     )
 
 
@@ -1052,6 +1071,238 @@ async def expire_old_reap_marks() -> int:
         return int(res.split()[-1])
     except (IndexError, ValueError):
         return 0
+
+
+# ----------------------------------------------------------------------------
+# Runeterra adventure (v3) — location, unlocked regions, goal progress
+# ----------------------------------------------------------------------------
+
+
+async def start_adventure(discord_id: int, region_key: str) -> None:
+    """Place a player into the world for the first time: set their location,
+    stamp adventure_started_at, and unlock their starting region. Idempotent
+    fields are fine to re-run, but callers should check adventure_started_at
+    first to avoid resetting an existing adventurer's region."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """
+                UPDATE users
+                   SET current_region = $2,
+                       adventure_started_at = COALESCE(adventure_started_at, NOW())
+                 WHERE discord_id = $1
+                """,
+                discord_id, region_key,
+            )
+            await conn.execute(
+                """
+                INSERT INTO user_regions (user_id, region_key)
+                VALUES ($1, $2)
+                ON CONFLICT (user_id, region_key) DO NOTHING
+                """,
+                discord_id, region_key,
+            )
+
+
+async def set_current_region(discord_id: int, region_key: str) -> None:
+    await get_pool().execute(
+        "UPDATE users SET current_region = $2 WHERE discord_id = $1",
+        discord_id, region_key,
+    )
+
+
+async def unlock_region(discord_id: int, region_key: str) -> bool:
+    """Returns True if newly unlocked, False if it was already unlocked."""
+    val = await get_pool().fetchval(
+        """
+        INSERT INTO user_regions (user_id, region_key) VALUES ($1, $2)
+        ON CONFLICT (user_id, region_key) DO NOTHING
+        RETURNING 1
+        """,
+        discord_id, region_key,
+    )
+    return val is not None
+
+
+async def list_unlocked_regions(discord_id: int) -> list[str]:
+    rows = await get_pool().fetch(
+        "SELECT region_key FROM user_regions WHERE user_id = $1 ORDER BY unlocked_at",
+        discord_id,
+    )
+    return [r["region_key"] for r in rows]
+
+
+async def is_region_unlocked(discord_id: int, region_key: str) -> bool:
+    val = await get_pool().fetchval(
+        "SELECT 1 FROM user_regions WHERE user_id = $1 AND region_key = $2",
+        discord_id, region_key,
+    )
+    return val is not None
+
+
+async def get_goal_progress(discord_id: int, goal_key: str) -> int:
+    val = await get_pool().fetchval(
+        "SELECT progress FROM user_goal_progress WHERE user_id = $1 AND goal_key = $2",
+        discord_id, goal_key,
+    )
+    return val or 0
+
+
+async def all_goal_progress(discord_id: int) -> dict[str, int]:
+    """Every counter-style goal value for a user, keyed by goal_key."""
+    rows = await get_pool().fetch(
+        "SELECT goal_key, progress FROM user_goal_progress WHERE user_id = $1",
+        discord_id,
+    )
+    return {r["goal_key"]: r["progress"] for r in rows}
+
+
+async def incr_goal_progress(
+    discord_id: int, goal_key: str, amount: int = 1,
+    *, conn: asyncpg.Connection | None = None,
+) -> int:
+    """Add to a counter-style goal. Returns the new total."""
+    query = """
+        INSERT INTO user_goal_progress (user_id, goal_key, progress)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, goal_key)
+        DO UPDATE SET progress = user_goal_progress.progress + $3
+        RETURNING progress
+    """
+    if conn is not None:
+        return await conn.fetchval(query, discord_id, goal_key, amount)
+    return await get_pool().fetchval(query, discord_id, goal_key, amount)
+
+
+async def set_goal_progress(discord_id: int, goal_key: str, value: int) -> None:
+    """Overwrite a goal counter (used to snapshot quest baselines)."""
+    await get_pool().execute(
+        """
+        INSERT INTO user_goal_progress (user_id, goal_key, progress)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (user_id, goal_key) DO UPDATE SET progress = EXCLUDED.progress
+        """,
+        discord_id, goal_key, value,
+    )
+
+
+# ----------------------------------------------------------------------------
+# Region quests (v3 Phase 4)
+# ----------------------------------------------------------------------------
+
+
+async def accept_quest(
+    discord_id: int,
+    quest_key: str,
+    baseline_key: str | None = None,
+    baseline_value: int = 0,
+) -> bool:
+    """Pick up a quest. Returns False if it was already accepted/completed.
+    `baseline_key` snapshots a cumulative counter so progress counts from now."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            val = await conn.fetchval(
+                """
+                INSERT INTO user_quests (user_id, quest_key) VALUES ($1, $2)
+                ON CONFLICT (user_id, quest_key) DO NOTHING
+                RETURNING 1
+                """,
+                discord_id, quest_key,
+            )
+            if val is None:
+                return False
+            if baseline_key is not None:
+                await conn.execute(
+                    """
+                    INSERT INTO user_goal_progress (user_id, goal_key, progress)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (user_id, goal_key)
+                    DO UPDATE SET progress = EXCLUDED.progress
+                    """,
+                    discord_id, baseline_key, baseline_value,
+                )
+            return True
+
+
+async def list_user_quests(discord_id: int) -> dict[str, str]:
+    """quest_key -> status ('active' | 'completed')."""
+    rows = await get_pool().fetch(
+        "SELECT quest_key, status FROM user_quests WHERE user_id = $1",
+        discord_id,
+    )
+    return {r["quest_key"]: r["status"] for r in rows}
+
+
+async def complete_quest(discord_id: int, quest_key: str) -> bool:
+    """Mark an active quest completed. Returns True only on the transition."""
+    val = await get_pool().fetchval(
+        """
+        UPDATE user_quests
+           SET status = 'completed', completed_at = NOW()
+         WHERE user_id = $1 AND quest_key = $2 AND status = 'active'
+         RETURNING 1
+        """,
+        discord_id, quest_key,
+    )
+    return val is not None
+
+
+# ----------------------------------------------------------------------------
+# v3 one-time migration reset (admin)
+# ----------------------------------------------------------------------------
+
+
+async def admin_v3_reset(wipe_tier: int) -> dict[str, int]:
+    """One-time v3 cutover for existing players:
+
+    - removes every owned champion of tier >= `wipe_tier` (and unequips them
+      from all loadouts),
+    - resets every user to Level 1 / 0 XP.
+
+    Gold and prestige are preserved. Returns a dict of affected counts.
+    """
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            champs_removed = await conn.fetchval(
+                """
+                WITH d AS (
+                    DELETE FROM user_champions uc USING champions c
+                     WHERE uc.champion_id = c.id AND c.tier >= $1
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """,
+                wipe_tier,
+            )
+            loadout_removed = await conn.fetchval(
+                """
+                WITH d AS (
+                    DELETE FROM loadouts l USING champions c
+                     WHERE l.champion_id = c.id AND c.tier >= $1
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """,
+                wipe_tier,
+            )
+            users_reset = await conn.fetchval(
+                """
+                WITH d AS (
+                    UPDATE users SET level = 1, xp = 0
+                     WHERE level > 1 OR xp > 0
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """
+            )
+    return {
+        "champions": champs_removed or 0,
+        "loadout_slots": loadout_removed or 0,
+        "users_releveled": users_reset or 0,
+    }
 
 
 # ----------------------------------------------------------------------------

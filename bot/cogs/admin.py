@@ -20,6 +20,51 @@ class Admin(commands.Cog):
         latency_ms = round(self.bot.latency * 1000)
         await interaction.response.send_message(f"Pong — {latency_ms} ms.", ephemeral=True)
 
+    # Epic tier — the v3 cutover wipes this tier and above.
+    V3_WIPE_TIER = 4
+
+    @app_commands.command(
+        name="reset-v3",
+        description="ADMIN: one-time v3 cutover — wipe Epic+ champions, reset all to Level 1.",
+    )
+    @app_commands.describe(confirm="Set to True to actually run the wipe.")
+    async def reset_v3(self, interaction: discord.Interaction, confirm: bool = False) -> None:
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not perms.administrator:
+            await interaction.response.send_message(
+                "This command is for server administrators only.", ephemeral=True
+            )
+            return
+
+        if not confirm:
+            await interaction.response.send_message(
+                "⚠️ **v3 cutover — this affects EVERY player and cannot be undone.**\n"
+                "• Removes all owned **Epic / Legendary / God / Death** champions "
+                "(Tier 4+), unequipping them everywhere.\n"
+                "• Resets everyone to **Level 1 / 0 XP**.\n"
+                "• **Gold and prestige are kept.**\n\n"
+                "Re-run with `confirm: True` to proceed.",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            result = await queries.admin_v3_reset(self.V3_WIPE_TIER)
+        except Exception as e:
+            log.exception("reset-v3 failed")
+            await interaction.response.send_message(f"Reset error: {e}", ephemeral=True)
+            return
+
+        log.info("v3 reset run by %s: %s", interaction.user.id, result)
+        await interaction.response.send_message(
+            "✅ **v3 cutover complete.**\n"
+            f"• Champions removed (Tier 4+): **{result['champions']}**\n"
+            f"• Loadout slots cleared: **{result['loadout_slots']}**\n"
+            f"• Players reset to Level 1: **{result['users_releveled']}**\n\n"
+            "Everyone should now run `/start-adventure` and begin from Bandle City.",
+            ephemeral=True,
+        )
+
     @app_commands.command(name="dbcheck", description="Verify DB connectivity and champion seed.")
     async def dbcheck(self, interaction: discord.Interaction) -> None:
         try:
