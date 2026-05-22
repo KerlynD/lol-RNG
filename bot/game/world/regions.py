@@ -198,6 +198,26 @@ def reward_decay_factor(current_key: str | None, unlocked: list[str]) -> float:
     return max(0.10, 1.0 - 0.45 * hops)
 
 
+def travel_cost(from_key: str, to_key: str) -> int:
+    """Gold cost to travel between two regions. Distance dominates (it scales
+    with the square of hop count), with a smaller bump for the destination's
+    danger band — so Shadow Isles → Demacia is brutal, Shadow Isles → Ixtal
+    is cheap."""
+    dest = get_region(to_key)
+    if dest is None or from_key == to_key:
+        return 0
+    hops = region_distance(from_key, to_key)
+    if hops <= 0:
+        return 0
+    return hops * hops * 200 + dest.tier_min * 120
+
+
+def travel_cooldown_minutes(from_key: str, to_key: str) -> int:
+    """Real-time cost of travel — a cooldown roughly 3 minutes per hop."""
+    hops = region_distance(from_key, to_key)
+    return max(1, hops) * 3
+
+
 def _validate_graph() -> None:
     """Module-load sanity check: every edge is bidirectional and well-formed."""
     for key, region in WORLD.items():

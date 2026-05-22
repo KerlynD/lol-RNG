@@ -1149,6 +1149,15 @@ async def get_goal_progress(discord_id: int, goal_key: str) -> int:
     return val or 0
 
 
+async def all_goal_progress(discord_id: int) -> dict[str, int]:
+    """Every counter-style goal value for a user, keyed by goal_key."""
+    rows = await get_pool().fetch(
+        "SELECT goal_key, progress FROM user_goal_progress WHERE user_id = $1",
+        discord_id,
+    )
+    return {r["goal_key"]: r["progress"] for r in rows}
+
+
 async def incr_goal_progress(
     discord_id: int, goal_key: str, amount: int = 1,
     *, conn: asyncpg.Connection | None = None,

@@ -82,6 +82,7 @@ class HuntEncounterView(discord.ui.View):
         cooldown_set: int,
         reward_factor: float = 1.0,
         opponent_splash: str | None = None,
+        region_key: str = "",
     ):
         super().__init__(timeout=float(ENCOUNTER_TIMEOUT_SEC))
         self.owner_id = owner_id
@@ -90,6 +91,7 @@ class HuntEncounterView(discord.ui.View):
         self.cooldown_set = cooldown_set
         self.reward_factor = reward_factor
         self.opponent_splash = opponent_splash
+        self.region_key = region_key
         self.message: discord.Message | None = None
         self.resolved = False
 
@@ -140,6 +142,15 @@ class HuntEncounterView(discord.ui.View):
         outcome = await run_camp_engage(
             user, self.camp, self.champ, reward_factor=self.reward_factor
         )
+        # Region unlock-goal progress: count won hunts (and wild-champ kills).
+        if outcome.fight.won and self.region_key:
+            await queries.incr_goal_progress(
+                self.owner_id, f"{self.region_key}:hunt_wins"
+            )
+            if self.camp.key.startswith("wild:"):
+                await queries.incr_goal_progress(
+                    self.owner_id, f"{self.region_key}:wild_kills"
+                )
         await interaction.response.edit_message(
             embed=camp_result_embed(
                 self.camp, self.champ, outcome,
@@ -247,7 +258,7 @@ class PVE(commands.Cog):
             view = HuntEncounterView(
                 owner_id=interaction.user.id, camp=camp, champ=None,
                 cooldown_set=cd, reward_factor=reward_factor,
-                opponent_splash=opponent_splash,
+                opponent_splash=opponent_splash, region_key=region.key,
             )
             await interaction.response.send_message(embed=embed, view=view)
             view.message = await interaction.original_response()
@@ -262,7 +273,7 @@ class PVE(commands.Cog):
         view = HuntEncounterView(
             owner_id=interaction.user.id, camp=camp, champ=champ,
             cooldown_set=cd, reward_factor=reward_factor,
-            opponent_splash=opponent_splash,
+            opponent_splash=opponent_splash, region_key=region.key,
         )
         await interaction.response.send_message(embed=embed, view=view)
         view.message = await interaction.original_response()

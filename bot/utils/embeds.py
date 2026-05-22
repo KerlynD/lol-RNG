@@ -443,31 +443,32 @@ def adventure_welcome_embed() -> discord.Embed:
     return embed
 
 
-def adventure_hub_embed(user: User, unlocked: list[str]) -> discord.Embed:
-    """The /adventure dashboard — current location, map, and what's reachable."""
+def adventure_hub_embed(
+    user: User,
+    unlocked: list[str],
+    neighbor_goals: dict | None = None,
+    travel_cd_remaining: float | None = None,
+) -> discord.Embed:
+    """The /adventure dashboard — current location, map, reachable regions and
+    the unlock-goal checklist for locked neighbors.
+
+    `neighbor_goals` maps a locked region_key -> list[GoalStatus].
+    """
     from bot.game.world.regions import (
         WORLD,
         get_region,
         roll_tier_cap,
         tier_band_label,
+        travel_cost,
     )
 
+    neighbor_goals = neighbor_goals or {}
     unlocked_set = set(unlocked)
     region = get_region(user.current_region)
     if region is None:
         return failure_embed("You have no location — run /start-adventure.")
 
     cap = roll_tier_cap(region.key)
-    neighbor_lines: list[str] = []
-    for nb_key in region.neighbors:
-        nb = WORLD.get(nb_key)
-        if nb is None or (nb.hidden and nb_key not in unlocked_set):
-            continue
-        mark = "✅ unlocked" if nb_key in unlocked_set else "🔒 locked"
-        neighbor_lines.append(
-            f"• **{nb.display}** ({tier_band_label(nb)}) — {mark}"
-        )
-
     embed = discord.Embed(
         title=f"🧭 Adventure — 📍 {region.display}",
         description=(
@@ -478,20 +479,87 @@ def adventure_hub_embed(user: User, unlocked: list[str]) -> discord.Embed:
         ),
         color=0x3F51B5,
     )
-    embed.add_field(
-        name="🗺 Connected regions",
-        value="\n".join(neighbor_lines) or "_none_",
-        inline=False,
-    )
+
+    for nb_key in region.neighbors:
+        nb = WORLD.get(nb_key)
+        if nb is None or (nb.hidden and nb_key not in unlocked_set):
+            continue
+        cost = travel_cost(region.key, nb_key)
+        if nb_key in unlocked_set:
+            embed.add_field(
+                name=f"✅ {nb.display} ({tier_band_label(nb)})",
+                value=f"Unlocked — travel for **{cost:,}** Gold.",
+                inline=False,
+            )
+        else:
+            statuses = neighbor_goals.get(nb_key, [])
+            lines = [
+                f"{'✅' if s.done else '⬜'} {s.goal.label}  "
+                f"({min(s.current, s.goal.target):,}/{s.goal.target:,})"
+                for s in statuses
+            ]
+            ready = statuses and all(s.done for s in statuses)
+            head = "🔓 READY — travel to unlock!" if ready else "🔒 Locked — goals:"
+            embed.add_field(
+                name=f"{'🔓' if ready else '🔒'} {nb.display} ({tier_band_label(nb)})",
+                value=f"{head}\n" + "\n".join(lines) + f"\nTravel cost: **{cost:,}** Gold.",
+                inline=False,
+            )
+
     embed.add_field(
         name="🌍 Map of Runeterra",
         value="\n".join(_world_map_lines(region.key, unlocked_set)),
         inline=False,
     )
-    embed.set_footer(
-        text="Travel, Quests & Region Actions arrive as the world is built out."
-    )
+    if travel_cd_remaining:
+        embed.set_footer(
+            text=f"✈ Resting from your last journey — {_format_seconds(travel_cd_remaining)} left."
+        )
     return embed
+
+
+def region_arrival_embed(region_key: str) -> discord.Embed:
+    """Story beat shown the first time a player unlocks/enters a region — a
+    greeting champion with their splash art."""
+    from bot.game.world.goals import ARRIVAL
+    from bot.game.world.regions import get_region
+    from bot.utils.champion_images import splash_url
+
+    region = get_region(region_key)
+    display = region.display if region else region_key
+    embed = discord.Embed(
+        title=f"🌟 A new land — {display}",
+        color=0xFFD54F,
+    )
+    arrival = ARRIVAL.get(region_key)
+    if arrival:
+        greeter, text = arrival
+        embed.description = text
+        embed.set_image(url=splash_url(greeter))
+        embed.set_author(name=f"{greeter} greets you")
+    else:
+        embed.description = f"You step through the portal into **{display}**."
+    if region:
+        embed.set_footer(text=f"{display} is now unlocked. Run /adventure.")
+    return embed
+
+
+def travel_embed(region_key: str, gold_spent: int) -> discord.Embed:
+    """Confirmation shown when travelling to an already-unlocked region."""
+    from bot.game.world.regions import get_region, tier_band_label
+
+    region = get_region(region_key)
+    display = region.display if region else region_key
+    band = f" ({tier_band_label(region)})" if region else ""
+    return discord.Embed(
+        title=f"✈ Travelled to {display}",
+        description=(
+            f"You arrive in **{display}**{band}.\n"
+            f"Journey cost: **{gold_spent:,}** Gold.\n\n"
+            f"_{region.blurb if region else ''}_"
+        ),
+        color=0x3F51B5,
+    )
 
 
 # --- internals ---------------------------------------------------------------
