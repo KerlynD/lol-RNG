@@ -1250,6 +1250,62 @@ async def complete_quest(discord_id: int, quest_key: str) -> bool:
 
 
 # ----------------------------------------------------------------------------
+# v3 one-time migration reset (admin)
+# ----------------------------------------------------------------------------
+
+
+async def admin_v3_reset(wipe_tier: int) -> dict[str, int]:
+    """One-time v3 cutover for existing players:
+
+    - removes every owned champion of tier >= `wipe_tier` (and unequips them
+      from all loadouts),
+    - resets every user to Level 1 / 0 XP.
+
+    Gold and prestige are preserved. Returns a dict of affected counts.
+    """
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            champs_removed = await conn.fetchval(
+                """
+                WITH d AS (
+                    DELETE FROM user_champions uc USING champions c
+                     WHERE uc.champion_id = c.id AND c.tier >= $1
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """,
+                wipe_tier,
+            )
+            loadout_removed = await conn.fetchval(
+                """
+                WITH d AS (
+                    DELETE FROM loadouts l USING champions c
+                     WHERE l.champion_id = c.id AND c.tier >= $1
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """,
+                wipe_tier,
+            )
+            users_reset = await conn.fetchval(
+                """
+                WITH d AS (
+                    UPDATE users SET level = 1, xp = 0
+                     WHERE level > 1 OR xp > 0
+                     RETURNING 1
+                )
+                SELECT COUNT(*) FROM d
+                """
+            )
+    return {
+        "champions": champs_removed or 0,
+        "loadout_slots": loadout_removed or 0,
+        "users_releveled": users_reset or 0,
+    }
+
+
+# ----------------------------------------------------------------------------
 # Smoke test (kept for /dbcheck)
 # ----------------------------------------------------------------------------
 
