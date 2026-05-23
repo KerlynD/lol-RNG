@@ -27,6 +27,7 @@ from bot.game.leveling import apply_xp
 from bot.game.world.explore import EXPLORE_COOLDOWN, run_explore
 from bot.game.world.goals import all_goals_met, evaluate_goals
 from bot.game.world.quests import quest_current, quests_for_region
+from bot.game.world.void_hints import pick_hint, void_proximity
 from bot.game.world.regions import (
     STARTING_REGION,
     WORLD,
@@ -82,12 +83,15 @@ def _region_has_actions(region_key: str) -> bool:
 # ── Goal / destination helpers ───────────────────────────────────────────────
 
 
-async def _neighbor_goal_map(user, unlocked: list[str]) -> dict:
+async def _neighbor_goal_map(
+    user, unlocked: list[str], progress: dict[str, int] | None = None
+) -> dict:
     region = get_region(user.current_region)
     if region is None:
         return {}
     unlocked_set = set(unlocked)
-    progress = await queries.all_goal_progress(user.discord_id)
+    if progress is None:
+        progress = await queries.all_goal_progress(user.discord_id)
     out: dict = {}
     for nb_key in region.neighbors:
         if nb_key in unlocked_set:
@@ -96,12 +100,15 @@ async def _neighbor_goal_map(user, unlocked: list[str]) -> dict:
     return out
 
 
-async def _destination_options(user, unlocked: list[str]) -> list[tuple[str, str, str]]:
+async def _destination_options(
+    user, unlocked: list[str], progress: dict[str, int] | None = None
+) -> list[tuple[str, str, str]]:
     region = get_region(user.current_region)
     if region is None:
         return []
     unlocked_set = set(unlocked)
-    progress = await queries.all_goal_progress(user.discord_id)
+    if progress is None:
+        progress = await queries.all_goal_progress(user.discord_id)
     out: list[tuple[str, str, str]] = []
     for nb_key in region.neighbors:
         nb = WORLD.get(nb_key)
@@ -144,12 +151,25 @@ async def _quest_states(uid: int, user) -> list[tuple]:
 async def _hub_view_and_embed(uid: int):
     user = await queries.get_user(uid)
     unlocked = await queries.list_unlocked_regions(uid)
-    goals = await _neighbor_goal_map(user, unlocked)
+    # One progress fetch — reused by goals, destinations, and the Void hint.
+    progress = await queries.all_goal_progress(uid)
+    goals = await _neighbor_goal_map(user, unlocked, progress=progress)
     travel_cd = await queries.check_cooldown(uid, TRAVEL_CD_KEY)
     has_quests = bool(quests_for_region(user.current_region or ""))
     has_actions = _region_has_actions(user.current_region or "")
-    destinations = [] if travel_cd else await _destination_options(user, unlocked)
-    embed = adventure_hub_embed(user, unlocked, goals, travel_cd)
+    destinations = (
+        [] if travel_cd
+        else await _destination_options(user, unlocked, progress=progress)
+    )
+    void_hint = None
+    if user.current_region in ("shurima", "targon"):
+        proximity = void_proximity(
+            user.gold, user.level, progress.get("shurima:hunt_wins", 0)
+        )
+        void_hint = pick_hint(user.current_region, proximity)
+    embed = adventure_hub_embed(
+        user, unlocked, goals, travel_cd, void_hint=void_hint
+    )
     return embed, AdventureHubView(uid, destinations, has_quests, has_actions)
 
 

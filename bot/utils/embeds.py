@@ -594,7 +594,7 @@ def leaderboard_embed(rows: list[tuple[int, str, RankedProfile]]) -> discord.Emb
 
 # Drop a hosted image of the map of Runeterra here to show it on
 # /start-adventure. Left blank ships a clean text map instead.
-RUNETERRA_MAP_URL = ""
+RUNETERRA_MAP_URL = "https://cdn.discordapp.com/attachments/1506879430461493248/1507171798679162940/image.png?ex=6a12401e&is=6a10ee9e&hm=19a549c39eefc449b7da220220f6ec7877786694e8fd0be5be785f346bbee31c&"
 
 
 def _world_map_lines(current_key: str | None, unlocked: set[str]) -> list[str]:
@@ -650,11 +650,14 @@ def adventure_hub_embed(
     unlocked: list[str],
     neighbor_goals: dict | None = None,
     travel_cd_remaining: float | None = None,
+    void_hint: str | None = None,
 ) -> discord.Embed:
     """The /adventure dashboard — current location, map, reachable regions and
     the unlock-goal checklist for locked neighbors.
 
     `neighbor_goals` maps a locked region_key -> list[GoalStatus].
+    `void_hint` is an optional cryptic line rendered as the final field —
+    the caller decides when to show it (see void_hints.py).
     """
     from bot.game.world.regions import (
         WORLD,
@@ -713,6 +716,11 @@ def adventure_hub_embed(
         value="\n".join(_world_map_lines(region.key, unlocked_set)),
         inline=False,
     )
+    if RUNETERRA_MAP_URL:
+        embed.set_thumbnail(url=RUNETERRA_MAP_URL)
+    if void_hint:
+        # Zero-width-space header keeps the field unlabelled — pure flavor.
+        embed.add_field(name="​", value=void_hint, inline=False)
     if travel_cd_remaining:
         embed.set_footer(
             text=f"✈ Resting from your last journey — {_format_seconds(travel_cd_remaining)} left."

@@ -35,6 +35,7 @@ from bot.game.world.regions import (
     get_region,
     reward_decay_factor,
 )
+from bot.game.world.void_hints import HUNT_WHISPER_CHANCE, HUNT_WHISPERS
 from bot.utils.decorators import register_user
 from bot.utils.embeds import (
     camp_result_embed,
@@ -50,6 +51,19 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 ENCOUNTER_TIMEOUT_SEC = 60
+
+
+def _maybe_void_whisper(
+    embed: discord.Embed, region_key: str, rng: random.Random
+) -> None:
+    """Rare cryptic line appended to the encounter card in Shurima/Targon.
+
+    Fires at HUNT_WHISPER_CHANCE; no-op everywhere else."""
+    pool = HUNT_WHISPERS.get(region_key)
+    if not pool or rng.random() >= HUNT_WHISPER_CHANCE:
+        return
+    line = rng.choice(pool)
+    embed.description = f"{embed.description}\n\n{line}"
 
 
 class HuntEncounterView(discord.ui.View):
@@ -267,6 +281,7 @@ class PVE(commands.Cog):
                 loadout=loadout, cooldown_set=cd, reward_factor=reward_factor,
                 opponent_splash=opponent_splash, region_key=region.key,
             )
+            _maybe_void_whisper(embed, region.key, rng)
             await interaction.response.send_message(embed=embed, view=view)
             view.message = await interaction.original_response()
             return
@@ -294,6 +309,7 @@ class PVE(commands.Cog):
             loadout=loadout, cooldown_set=cd, reward_factor=reward_factor,
             opponent_splash=opponent_splash, region_key=region.key,
         )
+        _maybe_void_whisper(embed, region.key, rng)
         await interaction.response.send_message(embed=embed, view=view)
         view.message = await interaction.original_response()
 
