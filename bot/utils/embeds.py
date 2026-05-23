@@ -282,7 +282,12 @@ def trade_embed(trade: Trade, offered: Champion, requested: Champion) -> discord
 
 
 def encounter_embed(
-    camp, champ, win_pct: float, *, opponent_splash: str | None = None
+    camp,
+    champ,
+    win_pct: float,
+    *,
+    opponent_splash: str | None = None,
+    gold_loss: int | None = None,
 ) -> discord.Embed:
     """Pre-engage card with the camp + your best champ + win% preview.
 
@@ -304,11 +309,12 @@ def encounter_embed(
         diff = max(-4, min(4, champ.tier - camp.tier))
         from bot.game.pve.combat import (
             DEFAULT_RESPAWN_SEC,
-            FAIL_GOLD_PCT,
             RESPAWN_DURATION_SEC,
+            fail_gold_pct,
         )
         respawn = RESPAWN_DURATION_SEC.get(diff, DEFAULT_RESPAWN_SEC)
-        gold_loss = int(camp.base_gold * FAIL_GOLD_PCT)
+        if gold_loss is None:
+            gold_loss = int(camp.base_gold * fail_gold_pct(diff))
         lines += [
             f"Your best alive champion: **{champ.name}** (T{champ.tier}, {champ.damage_type})",
             f"Estimated win chance: **{win_pct:.1f}%**",

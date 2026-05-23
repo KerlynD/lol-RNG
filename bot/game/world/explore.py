@@ -19,10 +19,10 @@ from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
 from bot.game.pve.combat import (
     DEFAULT_RESPAWN_SEC,
-    FAIL_GOLD_PCT,
     PVE_WIN_PCT_BY_DIFF,
     RESPAWN_DURATION_SEC,
     WEAKNESS_BONUS_PCT,
+    fail_gold_pct,
 )
 from bot.game.pve.encounters import (
     REGIONS,
@@ -136,7 +136,10 @@ async def _resolve_combat(user, enc, lead_entry, loadout, rng) -> ExploreResult:
         )
 
     respawn = RESPAWN_DURATION_SEC.get(diff, DEFAULT_RESPAWN_SEC)
-    penalty = min(user.gold, int(mob.base_gold * FAIL_GOLD_PCT))
+    penalty = min(
+        user.gold,
+        int(gold_payout(mob.base_gold, user.level, user.prestige) * fail_gold_pct(diff)),
+    )
     await queries.add_gold(user.discord_id, -penalty)
     await queries.kill_champion(
         user.discord_id, lead.id, timedelta(seconds=respawn)

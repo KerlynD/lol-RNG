@@ -16,8 +16,9 @@ from discord.ext import commands
 
 from bot.db import queries
 from bot.game.champions.abilities import progress_win_bonus
+from bot.game.economy import gold_payout
 from bot.game.pve.camps import CampSpec, cooldown_seconds
-from bot.game.pve.combat import lead_champion, preview_win_pct
+from bot.game.pve.combat import fail_gold_pct, lead_champion, preview_win_pct
 from bot.game.pve.encounters import REGIONS, LoreEncounter
 from bot.game.pve.runner import (
     HUNT_CAMP_KEY,
@@ -273,8 +274,16 @@ class PVE(commands.Cog):
         win_pct = preview_win_pct(
             lead.champion, camp, champ_bonus=progress_win_bonus(lead.progress)
         )
+        # Show the *actual* level-scaled gold loss in the preview, not the
+        # base-tier estimate — so players see the real stake before engaging.
+        diff = max(-4, min(4, lead.champion.tier - camp.tier))
+        gold_loss_preview = int(
+            gold_payout(camp.base_gold, user.level, user.prestige)
+            * fail_gold_pct(diff) * reward_factor
+        )
         embed = encounter_embed(
-            camp, lead.champion, win_pct, opponent_splash=opponent_splash
+            camp, lead.champion, win_pct,
+            opponent_splash=opponent_splash, gold_loss=gold_loss_preview,
         )
         if reward_factor < 1.0:
             embed.set_footer(

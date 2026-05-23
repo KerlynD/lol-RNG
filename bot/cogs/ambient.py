@@ -23,10 +23,10 @@ from bot.game.leveling import apply_xp
 from bot.game.pve.ambient import AMBIENT_POOL, AmbientSpec
 from bot.game.pve.combat import (
     DEFAULT_RESPAWN_SEC,
-    FAIL_GOLD_PCT,
     PVE_WIN_PCT_BY_DIFF,
     RESPAWN_DURATION_SEC,
     WEAKNESS_BONUS_PCT,
+    fail_gold_pct,
 )
 from bot.utils.embeds import info_embed
 
@@ -108,8 +108,13 @@ async def _resolve_ambient(interaction: discord.Interaction, *, fled: bool) -> N
 
     loadout = await queries.alive_loadout(user.discord_id)
     if not loadout:
-        # No alive champ — auto-loss
-        penalty = min(user.gold, max(10, int(spec.base_gold * FAIL_GOLD_PCT)))
+        # No alive champ — auto-loss (treated as a matched-tier defeat).
+        penalty = min(
+            user.gold,
+            max(10, int(
+                gold_payout(spec.base_gold, user.level, user.prestige) * fail_gold_pct(0)
+            )),
+        )
         await queries.add_gold(user.discord_id, -penalty)
         await queries.resolve_ambient_event(event_id, "lost", -penalty, 0)
         await interaction.response.edit_message(
@@ -158,9 +163,12 @@ async def _resolve_ambient(interaction: discord.Interaction, *, fled: bool) -> N
             view=None,
         )
     else:
-        # Loss — kill the champion
+        # Loss — kill the champion. Level-scaled, tier-diff-scaled penalty.
         respawn = RESPAWN_DURATION_SEC.get(diff, DEFAULT_RESPAWN_SEC)
-        penalty = min(user.gold, int(spec.base_gold * FAIL_GOLD_PCT))
+        penalty = min(
+            user.gold,
+            int(gold_payout(spec.base_gold, user.level, user.prestige) * fail_gold_pct(diff)),
+        )
         await queries.add_gold(user.discord_id, -penalty)
         await queries.kill_champion(user.discord_id, lead.id, timedelta(seconds=respawn))
         await queries.resolve_ambient_event(event_id, "lost", -penalty, 0)
