@@ -4,10 +4,10 @@ from bot.db.queries import Champion
 from bot.game.pve.camps import CAMPS, CampSpec
 from bot.game.pve.combat import (
     DEFAULT_RESPAWN_SEC,
-    FAIL_GOLD_PCT,
     PVE_WIN_PCT_BY_DIFF,
     RESPAWN_DURATION_SEC,
     WEAKNESS_BONUS_PCT,
+    fail_gold_pct,
     preview_win_pct,
     resolve_camp_fight,
 )
@@ -79,7 +79,8 @@ def test_resolve_loss_costs_fail_gold_pct():
         r = resolve_camp_fight(c, drake, rng=rng)
         if not r.won:
             losses += 1
-            assert r.gold_delta == -int(drake.base_gold * FAIL_GOLD_PCT)
+            # diff = -3 -> scaled fail %; base-tier estimate goes in gold_delta.
+            assert r.gold_delta == -int(drake.base_gold * fail_gold_pct(-3))
             assert r.respawn_seconds == DEFAULT_RESPAWN_SEC  # diff <= -4 fallback; -3 uses table
     # On the rebalanced curve diff -3 wins ~12%, so the vast majority lose.
     assert losses > sample * 0.7
@@ -133,6 +134,19 @@ def test_champ_bonus_adds_and_clamps():
     drake = CAMPS["drake_infernal"]
     floored = preview_win_pct(weak, drake, champ_bonus=-500)
     assert floored == 1.0
+
+
+def test_fail_gold_pct_scales_with_diff():
+    """Matched losses cost half a payout; punching above your weight nears 100%."""
+    assert fail_gold_pct(0) == 0.50
+    assert fail_gold_pct(-1) > fail_gold_pct(0)
+    assert fail_gold_pct(-2) > fail_gold_pct(-1)
+    assert fail_gold_pct(-3) > fail_gold_pct(-2)
+    assert fail_gold_pct(-4) == 1.0
+    # Any diff >= 0 uses the matched value (no bonus for being over-leveled).
+    assert fail_gold_pct(3) == fail_gold_pct(0)
+    # Anything <= -4 clamps to the harshest penalty.
+    assert fail_gold_pct(-99) == fail_gold_pct(-4)
 
 
 def test_revive_potion_drops_approx_2pct():

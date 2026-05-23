@@ -18,7 +18,7 @@ from bot.game.champions.leveling import (
 from bot.game.economy import gold_payout
 from bot.game.leveling import apply_xp
 from bot.game.pve.camps import CampSpec
-from bot.game.pve.combat import CampFightResult, resolve_camp_fight
+from bot.game.pve.combat import CampFightResult, fail_gold_pct, resolve_camp_fight
 from bot.game.pve.souls import (
     SOUL_DROP_TO_TYPE,
     activate_soul,
@@ -86,7 +86,15 @@ async def run_camp_engage(
         )
         xp_award = max(1, int(camp.base_xp * reward_factor))
     else:
-        scaled_gold = fight.gold_delta   # already negative — decay does not apply
+        # Losses now scale with level (matches win payouts) AND with how badly
+        # you were outmatched — fail_gold_pct returns 0.5 at matched tier and
+        # ramps to 1.0 four tiers down. Decay applies so backtracking still
+        # softens stakes both ways.
+        diff = max(-4, min(4, champ.tier - camp.tier))
+        scaled_gold = -int(
+            gold_payout(camp.base_gold, user.level, user.prestige)
+            * fail_gold_pct(diff) * reward_factor
+        )
         xp_award = 0
     xp_result = apply_xp(user.xp, user.level, xp_award)
 

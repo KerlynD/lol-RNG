@@ -36,7 +36,28 @@ RESPAWN_DURATION_SEC: dict[int, int] = {
     -3: 15 * 60,
 }
 DEFAULT_RESPAWN_SEC = 15 * 60     # used when diff <= -4
-FAIL_GOLD_PCT = 0.20              # lose 20% of camp.base_gold on loss
+
+# Gold loss on defeat — scaled by how badly outmatched you were. Mirrors the
+# respawn table: punching above your weight bleeds gold harder. A matched loss
+# (diff 0) costs half the level-scaled payout; losing four tiers down erases
+# what a win would have paid. Anything at-or-above the camp's tier uses 0.50.
+FAIL_GOLD_PCT_BY_DIFF: dict[int, float] = {
+    0: 0.50,
+    -1: 0.65,
+    -2: 0.80,
+    -3: 0.95,
+    -4: 1.00,
+}
+
+
+def fail_gold_pct(diff: int) -> float:
+    """Fraction of the level-scaled win payout to deduct on a loss."""
+    return FAIL_GOLD_PCT_BY_DIFF[max(-4, min(0, diff))]
+
+
+# Back-compat alias for callers that still reference a single constant. The
+# new code path uses fail_gold_pct(diff) via the runner.
+FAIL_GOLD_PCT = FAIL_GOLD_PCT_BY_DIFF[0]
 
 
 @dataclass(frozen=True)
@@ -101,10 +122,11 @@ def resolve_camp_fight(
             respawn_seconds=0,
         )
 
-    # Loss path
+    # Loss path. The reported gold_delta is a *base* estimate (camp.base_gold
+    # × the diff-scaled pct); the runner overrides with a level-scaled penalty.
     diff = max(-4, min(4, champ.tier - camp.tier))
     respawn = RESPAWN_DURATION_SEC.get(diff, DEFAULT_RESPAWN_SEC)
-    gold_loss = int(camp.base_gold * FAIL_GOLD_PCT)
+    gold_loss = int(camp.base_gold * fail_gold_pct(diff))
     return CampFightResult(
         won=False,
         win_pct=win_pct,
