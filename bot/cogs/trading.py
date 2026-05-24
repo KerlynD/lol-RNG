@@ -193,7 +193,7 @@ class TradeView(discord.ui.View):
 
 
 class _AddSelect(discord.ui.Select):
-    def __init__(self, parent: "TradeView", owned_options: list):
+    def __init__(self, trade_view: "TradeView", owned_options: list):
         options = [
             discord.SelectOption(
                 label=f"{oc.champion.name} ({TIER_NAME[oc.champion.tier]})"[:100],
@@ -205,12 +205,15 @@ class _AddSelect(discord.ui.Select):
             placeholder="Champion to add…",
             options=options, min_values=1, max_values=1,
         )
-        self._parent = parent
+        # NB: never assign `self._parent` — discord.py uses that name internally
+        # to track the Select's owning View.
+        self._trade_view = trade_view
 
     async def callback(self, interaction: discord.Interaction) -> None:
         champ_id = int(self.values[0])
-        side = self._parent._side_for(interaction.user.id)
-        added = await queries.add_trade_item(self._parent.trade_id, side, champ_id)
+        tv = self._trade_view
+        side = tv._side_for(interaction.user.id)
+        added = await queries.add_trade_item(tv.trade_id, side, champ_id)
         if not added:
             await interaction.response.edit_message(
                 content="❌ Couldn't add — either the trade is no longer editable or the champion is already on your side.",
@@ -218,11 +221,11 @@ class _AddSelect(discord.ui.Select):
             )
             return
         await interaction.response.edit_message(content="✅ Added.", view=None)
-        await _refresh_trade_message(interaction, self._parent)
+        await _refresh_trade_message(interaction, tv)
 
 
 class _RemoveSelect(discord.ui.Select):
-    def __init__(self, parent: "TradeView", items: list):
+    def __init__(self, trade_view: "TradeView", items: list):
         options = [
             discord.SelectOption(
                 label=f"{c.name} ({TIER_NAME[c.tier]})"[:100],
@@ -234,12 +237,13 @@ class _RemoveSelect(discord.ui.Select):
             placeholder="Champion to remove…",
             options=options, min_values=1, max_values=1,
         )
-        self._parent = parent
+        self._trade_view = trade_view
 
     async def callback(self, interaction: discord.Interaction) -> None:
         champ_id = int(self.values[0])
-        side = self._parent._side_for(interaction.user.id)
-        removed = await queries.remove_trade_item(self._parent.trade_id, side, champ_id)
+        tv = self._trade_view
+        side = tv._side_for(interaction.user.id)
+        removed = await queries.remove_trade_item(tv.trade_id, side, champ_id)
         if not removed:
             await interaction.response.edit_message(
                 content="❌ Couldn't remove — trade may already be confirmed.",
@@ -247,19 +251,19 @@ class _RemoveSelect(discord.ui.Select):
             )
             return
         await interaction.response.edit_message(content="✅ Removed.", view=None)
-        await _refresh_trade_message(interaction, self._parent)
+        await _refresh_trade_message(interaction, tv)
 
 
 class _AddPickerView(discord.ui.View):
-    def __init__(self, parent: "TradeView", owned_options: list):
+    def __init__(self, trade_view: "TradeView", owned_options: list):
         super().__init__(timeout=120.0)
-        self.add_item(_AddSelect(parent, owned_options))
+        self.add_item(_AddSelect(trade_view, owned_options))
 
 
 class _RemovePickerView(discord.ui.View):
-    def __init__(self, parent: "TradeView", items: list):
+    def __init__(self, trade_view: "TradeView", items: list):
         super().__init__(timeout=120.0)
-        self.add_item(_RemoveSelect(parent, items))
+        self.add_item(_RemoveSelect(trade_view, items))
 
 
 async def _refresh_trade_message(interaction: discord.Interaction, parent: "TradeView") -> None:
