@@ -60,6 +60,17 @@ def test_wild_champion_camp_payout_beats_a_monster():
     assert camp.base_gold > 2 * 70
 
 
+def test_wild_champion_camp_tier_override_scales_to_region():
+    """A roster-T2 champion encountered in Bilgewater (T5-T6) fights as T6."""
+    miss_fortune = _Champ(id=42, name="Miss Fortune", tier=2)
+    camp = wild_champion_camp(miss_fortune, tier=6)
+    assert camp.name == "Miss Fortune"   # identity preserved
+    assert camp.tier == 6                # but danger = region tier
+    # Payout and fragment drop scale with the encounter tier, not roster tier.
+    assert camp.base_gold == 6 * 150
+    assert ("fragment_t6", 0.15) in camp.drops
+
+
 def test_reward_decay_at_frontier_is_full():
     # Only Bandle City unlocked, standing in Bandle City — no decay.
     assert reward_decay_factor("bandle_city", ["bandle_city"]) == 1.0
