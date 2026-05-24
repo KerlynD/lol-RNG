@@ -42,3 +42,60 @@ def test_gold_payout_prestige_bonus():
 
 def test_gold_payout_zero_base():
     assert gold_payout(0, 30, prestige=5) == 0
+
+
+# --- Fragment redemption (v3 cross-tier conversion) -------------------------
+
+from bot.game.economy import (
+    FRAGMENT_THRESHOLDS,
+    available_redeem_options,
+    fragment_item_key,
+    redeem_cost,
+)
+
+
+def test_redeem_cost_same_tier_is_threshold():
+    for tier, threshold in FRAGMENT_THRESHOLDS.items():
+        assert redeem_cost(tier, tier) == threshold
+
+
+def test_redeem_cost_doubles_for_one_tier_up():
+    assert redeem_cost(1, 2) == FRAGMENT_THRESHOLDS[1] * 2
+    assert redeem_cost(3, 4) == FRAGMENT_THRESHOLDS[3] * 2
+
+
+def test_redeem_cost_triples_for_two_tiers_up():
+    assert redeem_cost(1, 3) == FRAGMENT_THRESHOLDS[1] * 3
+    assert redeem_cost(4, 6) == FRAGMENT_THRESHOLDS[4] * 3
+
+
+def test_redeem_cost_rejects_invalid_combos():
+    # Wrong direction
+    assert redeem_cost(3, 2) is None
+    # More than +2 tiers
+    assert redeem_cost(1, 4) is None
+    # Beyond the T6 fragment ceiling
+    assert redeem_cost(5, 7) is None
+
+
+def test_available_redeem_options_filters_by_inventory_and_cap():
+    inv = {
+        fragment_item_key(1): FRAGMENT_THRESHOLDS[1] * 3,  # enough for T1, T2, T3
+        fragment_item_key(2): FRAGMENT_THRESHOLDS[2],      # enough for T2 only
+    }
+    options = available_redeem_options(inv, region_tier_cap=6)
+    # T1 -> T1 (×1), T1 -> T2 (×2), T1 -> T3 (×3), T2 -> T2 (×1).
+    targets = {(s, t) for s, t, _ in options}
+    assert (1, 1) in targets
+    assert (1, 2) in targets
+    assert (1, 3) in targets
+    assert (2, 2) in targets
+    # T2 -> T3 needs 2× T2 fragments, user only has 1× threshold worth.
+    assert (2, 3) not in targets
+
+
+def test_available_redeem_options_respects_region_cap():
+    inv = {fragment_item_key(1): FRAGMENT_THRESHOLDS[1] * 3}
+    capped = available_redeem_options(inv, region_tier_cap=2)
+    targets = {t for _, t, _ in capped}
+    assert max(targets) == 2  # T3 path filtered out

@@ -35,10 +35,12 @@ def test_encounter_distribution_roughly_matches_weights():
     assert all(counts[k] > 0 for k in drake_keys)
 
 
-def test_cooldown_seconds_within_range():
+def test_cooldown_seconds_within_global_range():
+    """Hunt cooldown is now a flat 10-30s — camp.cooldown_range is vestigial."""
+    from bot.game.pve.camps import HUNT_COOLDOWN_MAX_SEC, HUNT_COOLDOWN_MIN_SEC
+
     rng = random.Random(7)
     for camp in CAMPS.values():
-        low, high = camp.cooldown_range
         for _ in range(20):
             cd = cooldown_seconds(camp, rng=rng)
-            assert low <= cd <= high
+            assert HUNT_COOLDOWN_MIN_SEC <= cd <= HUNT_COOLDOWN_MAX_SEC
