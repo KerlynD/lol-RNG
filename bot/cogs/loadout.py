@@ -319,13 +319,16 @@ class LoadoutEditView(discord.ui.View):
         by_slot: dict[int, int] = {e.slot: e.champion.id for e in loadout}
 
         # One Select per slot. If user has no owned champs, we still render
-        # empty selects so the structure is visible.
+        # empty selects so the structure is visible. Discord Views cap at
+        # 5 rows total and each Select fills a row — so at 5 unlocked slots
+        # there's no room for the Back button. Skip it then; the footer
+        # tells the user to dismiss and re-run /loadout.
         for slot in range(1, cap + 1):
             options = _champ_select_options(owned, by_slot.get(slot))
             view.add_item(SlotSelect(view, slot, options))
 
-        # Back button on the last available row.
-        view.add_item(_BackToDashButton(view))
+        if cap < 5:
+            view.add_item(_BackToDashButton(view))
         return view
 
     async def build_embed(self) -> discord.Embed:
@@ -347,6 +350,11 @@ class LoadoutEditView(discord.ui.View):
             desc += (
                 f"\n\n_Only the top {_SELECT_MAX_OPTIONS - 1} highest-tier "
                 f"champions are listed per slot. Filter by tier coming later._"
+            )
+        if cap >= 5:
+            desc += (
+                "\n\n_Five slots fill this panel — dismiss it and rerun "
+                "`/loadout` to return to the dashboard._"
             )
         return discord.Embed(
             title=f"🛠 Edit loadout — {self.display_name}",
