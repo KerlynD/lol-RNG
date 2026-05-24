@@ -1,9 +1,10 @@
 """Ambient event spawner.
 
-Every 5 min: pick a random opted-in active user without a pending event,
-post a surprise encounter in the configured channel. Aggregate per-user
-cadence lands at ~20-40 min because the same user can't be re-pinged within
-20 min of their last event.
+Every 10 min: with 50% chance, pick one random opted-in active user without
+a pending event and post a surprise encounter. Combined with the per-user
+60-min cooldown floor below, aggregate per-user cadence lands at roughly
+1-2 hours between pings — random encounters should feel rare and tasteful,
+not constant.
 """
 from __future__ import annotations
 
@@ -25,7 +26,9 @@ from bot.game.pve.combat import (
 log = logging.getLogger(__name__)
 
 CONFIG_AMBIENT_CHANNEL = "ambient_channel_id"
-MAX_SPAWNS_PER_TICK = 1   # one per tick, keeps cadence sane
+MAX_SPAWNS_PER_TICK = 1            # one per tick, keeps cadence sane
+PER_USER_COOLDOWN_MIN = 60         # SQL filter: don't re-ping within 1 hour
+SPAWN_CHANCE_PER_TICK = 0.5        # adds variance so ticks don't feel clockwork
 
 
 def _bot_ref():
@@ -39,7 +42,7 @@ def attach_bot(bot: discord.Client) -> None:
     _bot_ref.bot = bot  # type: ignore[attr-defined]
 
 
-@tasks.loop(minutes=5)
+@tasks.loop(minutes=10)
 async def spawn_ambient_events() -> None:
     try:
         await queries.expire_pending_ambient_events()
@@ -48,7 +51,13 @@ async def spawn_ambient_events() -> None:
         if not channel_id_str:
             return
 
-        candidates = await queries.list_opted_in_active_users(active_days=7, ambient_cooldown_min=20)
+        # Coin-flip per tick — keeps the rhythm from feeling mechanical.
+        if random.random() >= SPAWN_CHANCE_PER_TICK:
+            return
+
+        candidates = await queries.list_opted_in_active_users(
+            active_days=7, ambient_cooldown_min=PER_USER_COOLDOWN_MIN
+        )
         if not candidates:
             return
 

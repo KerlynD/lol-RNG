@@ -369,7 +369,7 @@ class Menu(commands.Cog):
 
         # ── Ambient encounter status ───────────────────────────────────────
         ambient_line = (
-            "ON — ambient encounters may surprise you every ~20–40 min."
+            "ON — ambient encounters may surprise you every ~1–2 hours."
             if user.ambient_events_opt_in
             else "OFF — turn on with `/ambient-toggle opt_in:True`."
         )
