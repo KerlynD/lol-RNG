@@ -80,12 +80,16 @@ class Trade:
     id: int
     initiator_id: int
     target_id: int
-    offered_champion_id: int
-    requested_champion_id: int
+    offered_champion_id: int | None
+    requested_champion_id: int | None
     status: str
     created_at: datetime
     expires_at: datetime
     resolved_at: datetime | None
+    initiator_confirmed: bool = False
+    target_confirmed: bool = False
+    channel_id: int | None = None
+    message_id: int | None = None
 
 
 # ----------------------------------------------------------------------------
@@ -978,6 +982,7 @@ async def count_recent_attacks_received(defender_id: int, hours: int = 24) -> in
 
 
 def _row_to_trade(row: asyncpg.Record) -> Trade:
+    keys = row.keys()
     return Trade(
         id=row["id"],
         initiator_id=row["initiator_id"],
@@ -988,6 +993,10 @@ def _row_to_trade(row: asyncpg.Record) -> Trade:
         created_at=row["created_at"],
         expires_at=row["expires_at"],
         resolved_at=row["resolved_at"],
+        initiator_confirmed=row["initiator_confirmed"] if "initiator_confirmed" in keys else False,
+        target_confirmed=row["target_confirmed"] if "target_confirmed" in keys else False,
+        channel_id=row["channel_id"] if "channel_id" in keys else None,
+        message_id=row["message_id"] if "message_id" in keys else None,
     )
 
 
@@ -1054,6 +1063,196 @@ async def set_trade_status(
         val = await conn.fetchval(query, trade_id, status)
     else:
         val = await get_pool().fetchval(query, trade_id, status)
+    return val is not None
+
+
+# --- v3 multi-item trades ---------------------------------------------------
+
+
+async def create_trade_session(
+    initiator_id: int, target_id: int, ttl: timedelta
+) -> Trade:
+    """Open an empty interactive trade. Items are added via add_trade_item."""
+    expires_at = datetime.now(tz=timezone.utc) + ttl
+    row = await get_pool().fetchrow(
+        """
+        INSERT INTO trades (initiator_id, target_id, expires_at)
+        VALUES ($1, $2, $3)
+        RETURNING *
+        """,
+        initiator_id, target_id, expires_at,
+    )
+    return _row_to_trade(row)
+
+
+async def set_trade_message(trade_id: int, channel_id: int, message_id: int) -> None:
+    await get_pool().execute(
+        "UPDATE trades SET channel_id = $2, message_id = $3 WHERE id = $1",
+        trade_id, channel_id, message_id,
+    )
+
+
+async def add_trade_item(trade_id: int, side: str, champion_id: int) -> bool:
+    """Insert an item on the given side. Returns False if it was already there,
+    if the trade isn't pending, or if either side has already confirmed."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT status, initiator_confirmed, target_confirmed "
+                "FROM trades WHERE id = $1 FOR UPDATE",
+                trade_id,
+            )
+            if row is None or row["status"] != "pending":
+                return False
+            if row["initiator_confirmed"] or row["target_confirmed"]:
+                return False
+            val = await conn.fetchval(
+                """
+                INSERT INTO trade_items (trade_id, side, champion_id)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (trade_id, side, champion_id) DO NOTHING
+                RETURNING 1
+                """,
+                trade_id, side, champion_id,
+            )
+            return val is not None
+
+
+async def remove_trade_item(trade_id: int, side: str, champion_id: int) -> bool:
+    """Remove an item from a side. Same confirm/pending guard as add."""
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT status, initiator_confirmed, target_confirmed "
+                "FROM trades WHERE id = $1 FOR UPDATE",
+                trade_id,
+            )
+            if row is None or row["status"] != "pending":
+                return False
+            if row["initiator_confirmed"] or row["target_confirmed"]:
+                return False
+            val = await conn.fetchval(
+                """
+                DELETE FROM trade_items
+                 WHERE trade_id = $1 AND side = $2 AND champion_id = $3
+                 RETURNING 1
+                """,
+                trade_id, side, champion_id,
+            )
+            return val is not None
+
+
+async def list_trade_items(trade_id: int) -> dict[str, list[Champion]]:
+    """Returns {'initiator': [Champion, ...], 'target': [Champion, ...]}."""
+    rows = await get_pool().fetch(
+        """
+        SELECT ti.side, c.*
+          FROM trade_items ti
+          JOIN champions c ON c.id = ti.champion_id
+         WHERE ti.trade_id = $1
+         ORDER BY ti.side, ti.added_at
+        """,
+        trade_id,
+    )
+    out: dict[str, list[Champion]] = {"initiator": [], "target": []}
+    for r in rows:
+        out[r["side"]].append(_row_to_champion(r))
+    return out
+
+
+async def set_trade_confirmed(
+    trade_id: int, side: str, confirmed: bool = True
+) -> Trade | None:
+    """Toggle a side's confirm flag. Returns the updated Trade or None."""
+    column = "initiator_confirmed" if side == "initiator" else "target_confirmed"
+    row = await get_pool().fetchrow(
+        f"UPDATE trades SET {column} = $2 WHERE id = $1 RETURNING *",
+        trade_id, confirmed,
+    )
+    return _row_to_trade(row) if row else None
+
+
+async def execute_trade_v2(trade_id: int) -> tuple[bool, str]:
+    """Atomic swap of all trade_items. Both sides must already be confirmed.
+
+    Returns (True, "") on success, or (False, reason) on failure. Trade status
+    is updated to 'accepted' on success, 'cancelled' on validation failure.
+    """
+    p = get_pool()
+    async with p.acquire() as conn:
+        async with conn.transaction():
+            trade_row = await conn.fetchrow(
+                "SELECT * FROM trades WHERE id = $1 FOR UPDATE", trade_id
+            )
+            if trade_row is None:
+                return False, "Trade not found."
+            if trade_row["status"] != "pending":
+                return False, f"Trade is `{trade_row['status']}`."
+            if not (trade_row["initiator_confirmed"] and trade_row["target_confirmed"]):
+                return False, "Both sides must confirm first."
+
+            items = await conn.fetch(
+                "SELECT side, champion_id FROM trade_items WHERE trade_id = $1",
+                trade_id,
+            )
+            if not items:
+                await conn.execute(
+                    "UPDATE trades SET status = 'cancelled', resolved_at = NOW() "
+                    "WHERE id = $1", trade_id,
+                )
+                return False, "Empty trade — nothing to swap."
+
+            initiator_id = trade_row["initiator_id"]
+            target_id = trade_row["target_id"]
+            by_side: dict[str, list[int]] = {"initiator": [], "target": []}
+            for it in items:
+                by_side[it["side"]].append(it["champion_id"])
+
+            # Re-validate ownership + locked state for every item.
+            for side, owner in (("initiator", initiator_id), ("target", target_id)):
+                for champ_id in by_side[side]:
+                    row = await conn.fetchrow(
+                        "SELECT locked FROM user_champions "
+                        "WHERE user_id = $1 AND champion_id = $2",
+                        owner, champ_id,
+                    )
+                    if row is None:
+                        await conn.execute(
+                            "UPDATE trades SET status='cancelled', resolved_at=NOW() "
+                            "WHERE id=$1", trade_id,
+                        )
+                        return False, "Someone no longer owns one of the champions."
+                    if row["locked"]:
+                        await conn.execute(
+                            "UPDATE trades SET status='cancelled', resolved_at=NOW() "
+                            "WHERE id=$1", trade_id,
+                        )
+                        return False, "A traded champion is locked."
+
+            # Atomic swap — initiator's items go to target and vice versa.
+            for champ_id in by_side["initiator"]:
+                await remove_champion(initiator_id, champ_id, conn=conn)
+                await own_champion(target_id, champ_id, conn=conn)
+            for champ_id in by_side["target"]:
+                await remove_champion(target_id, champ_id, conn=conn)
+                await own_champion(initiator_id, champ_id, conn=conn)
+
+            await conn.execute(
+                "UPDATE trades SET status='accepted', resolved_at=NOW() WHERE id=$1",
+                trade_id,
+            )
+    return True, ""
+
+
+async def cancel_trade(trade_id: int) -> bool:
+    """Mark a pending trade cancelled (any party may do so)."""
+    val = await get_pool().fetchval(
+        "UPDATE trades SET status='cancelled', resolved_at=NOW() "
+        "WHERE id=$1 AND status='pending' RETURNING 1",
+        trade_id,
+    )
     return val is not None
 
 

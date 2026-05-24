@@ -1,4 +1,11 @@
-"""Trading cog — /trade, /accept, /decline, /cancel, /trades, /trade-log."""
+"""Trading cog — single interactive `/trade @target` flow.
+
+v3 replaces the old /trade + /accept + /decline + /cancel + /trades +
+/trade-log set with one public embed both players interact with. Either
+side can add or remove their own champions; the swap fires when both
+sides hit Confirm. Multi-item offers are supported (3-for-1, 2-for-2,
+etc) so trades can be made "fair" without forcing single-champ pairings.
+"""
 from __future__ import annotations
 
 import logging
@@ -9,283 +16,309 @@ from discord import app_commands
 from discord.ext import commands
 
 from bot.db import queries
-from bot.db.pool import get_pool
-from bot.game.economy import TRADE_TAX_GOLD
 from bot.utils.decorators import register_user
-from bot.utils.embeds import (
-    TIER_NAME,
-    failure_embed,
-    info_embed,
-    trade_embed,
-)
+from bot.utils.embeds import TIER_NAME, failure_embed, info_embed
 
 TRADE_TTL = timedelta(hours=1)
 log = logging.getLogger(__name__)
 
 
-async def _autocomplete_owned(
-    interaction: discord.Interaction, current: str
-) -> list[app_commands.Choice[str]]:
-    owned = await queries.list_owned(interaction.user.id)
-    needle = (current or "").lower()
-    return [
-        app_commands.Choice(name=oc.champion.name, value=oc.champion.name)
-        for oc in owned if needle in oc.champion.name.lower()
-    ][:25]
+# ── Embed builders ──────────────────────────────────────────────────────────
+
+
+def _format_items(items: list) -> str:
+    if not items:
+        return "_empty — add some champions_"
+    return "\n".join(
+        f"• **{c.name}** ({TIER_NAME[c.tier]})" for c in items
+    )
+
+
+def _trade_status_line(trade, ended: str | None = None) -> str:
+    if ended:
+        return f"Status: **{ended}**"
+    parts = []
+    parts.append("✅ confirmed" if trade.initiator_confirmed else "⏳ choosing")
+    parts.append("✅ confirmed" if trade.target_confirmed else "⏳ choosing")
+    return f"Initiator: {parts[0]}  ·  Target: {parts[1]}"
+
+
+def trade_session_embed(
+    trade,
+    initiator: discord.abc.User,
+    target: discord.abc.User,
+    items_by_side: dict[str, list],
+    ended: str | None = None,
+) -> discord.Embed:
+    color = 0x9C27B0
+    if ended == "accepted":
+        color = 0x4CAF50
+    elif ended in ("cancelled", "expired"):
+        color = 0xF44336
+    embed = discord.Embed(
+        title=f"🤝 Trade — {initiator.display_name} ↔ {target.display_name}",
+        description=(
+            f"**{initiator.display_name}** is offering:\n"
+            f"{_format_items(items_by_side.get('initiator', []))}\n\n"
+            f"**{target.display_name}** is offering:\n"
+            f"{_format_items(items_by_side.get('target', []))}\n\n"
+            f"{_trade_status_line(trade, ended)}"
+        ),
+        color=color,
+    )
+    if ended is None:
+        embed.set_footer(
+            text=(
+                f"Trade #{trade.id} · expires <t:{int(trade.expires_at.timestamp())}:R>"
+                "  ·  Either side: Add / Remove your own. Confirm when ready."
+            )
+        )
+    return embed
+
+
+# ── Interactive view + selects ──────────────────────────────────────────────
+
+
+class TradeView(discord.ui.View):
+    """The four-button view attached to the trade message itself."""
+
+    def __init__(self, trade_id: int, initiator_id: int, target_id: int):
+        super().__init__(timeout=TRADE_TTL.total_seconds())
+        self.trade_id = trade_id
+        self.initiator_id = initiator_id
+        self.target_id = target_id
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id not in (self.initiator_id, self.target_id):
+            await interaction.response.send_message(
+                "This isn't your trade.", ephemeral=True
+            )
+            return False
+        return True
+
+    def _side_for(self, user_id: int) -> str:
+        return "initiator" if user_id == self.initiator_id else "target"
+
+    @discord.ui.button(label="Add", emoji="➕", style=discord.ButtonStyle.success)
+    async def add_btn(self, interaction: discord.Interaction, _btn: discord.ui.Button) -> None:
+        side = self._side_for(interaction.user.id)
+        owned = await queries.list_owned(interaction.user.id)
+        items = await queries.list_trade_items(self.trade_id)
+        in_trade = {c.id for c in items.get(side, [])}
+        candidates = [oc for oc in owned if not oc.locked and oc.champion.id not in in_trade]
+        if not candidates:
+            await interaction.response.send_message(
+                embed=failure_embed(
+                    "No more champions to offer (all owned-and-unlocked are already on the table)."
+                ),
+                ephemeral=True,
+            )
+            return
+        candidates.sort(key=lambda oc: (-oc.champion.tier, oc.champion.name))
+        await interaction.response.send_message(
+            content="Pick one to add to your side:",
+            view=_AddPickerView(self, candidates[:25]),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Remove", emoji="➖", style=discord.ButtonStyle.secondary)
+    async def remove_btn(self, interaction: discord.Interaction, _btn: discord.ui.Button) -> None:
+        side = self._side_for(interaction.user.id)
+        items = await queries.list_trade_items(self.trade_id)
+        my_items = items.get(side, [])
+        if not my_items:
+            await interaction.response.send_message(
+                embed=info_embed("You have nothing on the table yet."),
+                ephemeral=True,
+            )
+            return
+        await interaction.response.send_message(
+            content="Pick one to take back:",
+            view=_RemovePickerView(self, my_items),
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Confirm", emoji="✅", style=discord.ButtonStyle.primary)
+    async def confirm_btn(self, interaction: discord.Interaction, _btn: discord.ui.Button) -> None:
+        side = self._side_for(interaction.user.id)
+        items = await queries.list_trade_items(self.trade_id)
+        if not items.get(side):
+            await interaction.response.send_message(
+                embed=failure_embed("Add at least one champion before confirming."),
+                ephemeral=True,
+            )
+            return
+        trade = await queries.set_trade_confirmed(self.trade_id, side, True)
+        if trade is None:
+            await interaction.response.send_message(
+                embed=failure_embed("Trade is gone."), ephemeral=True
+            )
+            return
+        if trade.initiator_confirmed and trade.target_confirmed:
+            ok, reason = await queries.execute_trade_v2(self.trade_id)
+            ended = "accepted" if ok else "cancelled"
+            await self._rerender(interaction, ended=ended)
+            self.stop()
+            if not ok:
+                await interaction.followup.send(
+                    embed=failure_embed(f"Swap failed: {reason}"), ephemeral=True
+                )
+            return
+        await self._rerender(interaction)
+
+    @discord.ui.button(label="Cancel", emoji="✖️", style=discord.ButtonStyle.danger)
+    async def cancel_btn(self, interaction: discord.Interaction, _btn: discord.ui.Button) -> None:
+        ok = await queries.cancel_trade(self.trade_id)
+        if not ok:
+            await interaction.response.send_message(
+                embed=failure_embed("Trade is no longer active."), ephemeral=True
+            )
+            return
+        await self._rerender(interaction, ended="cancelled")
+        self.stop()
+
+    async def _rerender(
+        self, interaction: discord.Interaction, ended: str | None = None
+    ) -> None:
+        trade = await queries.get_trade(self.trade_id)
+        items = await queries.list_trade_items(self.trade_id)
+        initiator = interaction.guild.get_member(self.initiator_id) or await interaction.client.fetch_user(self.initiator_id)
+        target = interaction.guild.get_member(self.target_id) or await interaction.client.fetch_user(self.target_id)
+        if ended:
+            for child in self.children:
+                child.disabled = True  # type: ignore[attr-defined]
+        embed = trade_session_embed(trade, initiator, target, items, ended=ended)
+        view = None if ended else self
+        await interaction.response.edit_message(embed=embed, view=view)
+
+
+class _AddSelect(discord.ui.Select):
+    def __init__(self, parent: "TradeView", owned_options: list):
+        options = [
+            discord.SelectOption(
+                label=f"{oc.champion.name} ({TIER_NAME[oc.champion.tier]})"[:100],
+                value=str(oc.champion.id),
+            )
+            for oc in owned_options
+        ]
+        super().__init__(
+            placeholder="Champion to add…",
+            options=options, min_values=1, max_values=1,
+        )
+        self._parent = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        champ_id = int(self.values[0])
+        side = self._parent._side_for(interaction.user.id)
+        added = await queries.add_trade_item(self._parent.trade_id, side, champ_id)
+        if not added:
+            await interaction.response.edit_message(
+                content="❌ Couldn't add — either the trade is no longer editable or the champion is already on your side.",
+                view=None,
+            )
+            return
+        await interaction.response.edit_message(content="✅ Added.", view=None)
+        await _refresh_trade_message(interaction, self._parent)
+
+
+class _RemoveSelect(discord.ui.Select):
+    def __init__(self, parent: "TradeView", items: list):
+        options = [
+            discord.SelectOption(
+                label=f"{c.name} ({TIER_NAME[c.tier]})"[:100],
+                value=str(c.id),
+            )
+            for c in items[:25]
+        ]
+        super().__init__(
+            placeholder="Champion to remove…",
+            options=options, min_values=1, max_values=1,
+        )
+        self._parent = parent
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        champ_id = int(self.values[0])
+        side = self._parent._side_for(interaction.user.id)
+        removed = await queries.remove_trade_item(self._parent.trade_id, side, champ_id)
+        if not removed:
+            await interaction.response.edit_message(
+                content="❌ Couldn't remove — trade may already be confirmed.",
+                view=None,
+            )
+            return
+        await interaction.response.edit_message(content="✅ Removed.", view=None)
+        await _refresh_trade_message(interaction, self._parent)
+
+
+class _AddPickerView(discord.ui.View):
+    def __init__(self, parent: "TradeView", owned_options: list):
+        super().__init__(timeout=120.0)
+        self.add_item(_AddSelect(parent, owned_options))
+
+
+class _RemovePickerView(discord.ui.View):
+    def __init__(self, parent: "TradeView", items: list):
+        super().__init__(timeout=120.0)
+        self.add_item(_RemoveSelect(parent, items))
+
+
+async def _refresh_trade_message(interaction: discord.Interaction, parent: "TradeView") -> None:
+    """Edit the public trade message after an ephemeral picker action."""
+    trade = await queries.get_trade(parent.trade_id)
+    if trade is None or trade.message_id is None or trade.channel_id is None:
+        return
+    items = await queries.list_trade_items(parent.trade_id)
+    initiator = interaction.guild.get_member(parent.initiator_id) or await interaction.client.fetch_user(parent.initiator_id)
+    target = interaction.guild.get_member(parent.target_id) or await interaction.client.fetch_user(parent.target_id)
+    embed = trade_session_embed(trade, initiator, target, items)
+    channel = interaction.client.get_channel(trade.channel_id)
+    if channel is None:
+        return
+    try:
+        msg = await channel.fetch_message(trade.message_id)
+        await msg.edit(embed=embed, view=parent)
+    except discord.HTTPException:
+        log.exception("Failed to refresh trade message")
+
+
+# ── Cog ──────────────────────────────────────────────────────────────────────
 
 
 class Trading(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.command(name="trade", description=f"Offer a trade. Flat {TRADE_TAX_GOLD} Gold tax.")
-    @app_commands.describe(
-        target="The user you want to trade with.",
-        offer="Your champion you'd give up.",
-        request="Their champion you want.",
+    @app_commands.command(
+        name="trade",
+        description="Open an interactive trade — both players add champions and confirm.",
     )
-    @app_commands.autocomplete(offer=_autocomplete_owned)
+    @app_commands.describe(target="The user you want to trade with.")
     @register_user
     async def trade(
-        self,
-        interaction: discord.Interaction,
-        target: discord.Member,
-        offer: str,
-        request: str,
+        self, interaction: discord.Interaction, target: discord.Member
     ) -> None:
         if target.bot or target.id == interaction.user.id:
             await interaction.response.send_message(
                 embed=failure_embed("Invalid trade target."), ephemeral=True
             )
             return
-
-        offered = await queries.get_champion_by_name(offer)
-        requested = await queries.get_champion_by_name(request)
-        if offered is None:
-            await interaction.response.send_message(
-                embed=failure_embed(f"No champion named **{offer}**."), ephemeral=True
-            )
-            return
-        if requested is None:
-            await interaction.response.send_message(
-                embed=failure_embed(f"No champion named **{request}**."), ephemeral=True
-            )
-            return
-
-        if not await queries.owns_champion(interaction.user.id, offered.id):
-            await interaction.response.send_message(
-                embed=failure_embed(f"You don't own **{offered.name}**."), ephemeral=True
-            )
-            return
-        if await queries.is_locked(interaction.user.id, offered.id):
-            await interaction.response.send_message(
-                embed=failure_embed(f"**{offered.name}** is locked."), ephemeral=True
-            )
-            return
-
         await queries.ensure_user(target.id)
-        if not await queries.owns_champion(target.id, requested.id):
-            await interaction.response.send_message(
-                embed=failure_embed(f"{target.display_name} doesn't own **{requested.name}**."),
-                ephemeral=True,
-            )
-            return
 
-        initiator = await queries.get_user(interaction.user.id)
-        if initiator.gold < TRADE_TAX_GOLD:
-            await interaction.response.send_message(
-                embed=failure_embed(
-                    f"Need {TRADE_TAX_GOLD:,} Gold tax. You have {initiator.gold:,}."
-                ),
-                ephemeral=True,
-            )
-            return
-
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await queries.add_gold(interaction.user.id, -TRADE_TAX_GOLD, conn=conn)
-        trade_row = await queries.create_trade(
+        trade = await queries.create_trade_session(
             initiator_id=interaction.user.id,
             target_id=target.id,
-            offered_champion_id=offered.id,
-            requested_champion_id=requested.id,
             ttl=TRADE_TTL,
         )
-
-        embed = trade_embed(trade_row, offered, requested)
-        embed.set_footer(text=f"Tax {TRADE_TAX_GOLD} Gold paid. {target.display_name} has 1h to /accept.")
-        await interaction.response.send_message(content=target.mention, embed=embed)
-
-    @app_commands.command(name="accept", description="Accept a pending trade by ID.")
-    @register_user
-    async def accept(self, interaction: discord.Interaction, trade_id: int) -> None:
-        trade = await queries.get_trade(trade_id)
-        if trade is None or trade.target_id != interaction.user.id:
-            await interaction.response.send_message(
-                embed=failure_embed("That trade isn't yours to accept."), ephemeral=True
-            )
-            return
-        if trade.status != "pending":
-            await interaction.response.send_message(
-                embed=failure_embed(f"Trade #{trade_id} is `{trade.status}`."), ephemeral=True
-            )
-            return
-
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                # Re-validate inside the transaction.
-                initiator_owns = await conn.fetchval(
-                    "SELECT 1 FROM user_champions WHERE user_id = $1 AND champion_id = $2",
-                    trade.initiator_id, trade.offered_champion_id,
-                )
-                target_owns = await conn.fetchval(
-                    "SELECT 1 FROM user_champions WHERE user_id = $1 AND champion_id = $2",
-                    trade.target_id, trade.requested_champion_id,
-                )
-                initiator_locked = await conn.fetchval(
-                    "SELECT locked FROM user_champions WHERE user_id = $1 AND champion_id = $2",
-                    trade.initiator_id, trade.offered_champion_id,
-                )
-                target_locked = await conn.fetchval(
-                    "SELECT locked FROM user_champions WHERE user_id = $1 AND champion_id = $2",
-                    trade.target_id, trade.requested_champion_id,
-                )
-
-                if not initiator_owns or not target_owns:
-                    await queries.set_trade_status(trade_id, "cancelled", conn=conn)
-                    await interaction.response.send_message(
-                        embed=failure_embed("One side no longer owns the traded champion."),
-                        ephemeral=True,
-                    )
-                    return
-                if initiator_locked or target_locked:
-                    await queries.set_trade_status(trade_id, "cancelled", conn=conn)
-                    await interaction.response.send_message(
-                        embed=failure_embed("One side has the champion locked."),
-                        ephemeral=True,
-                    )
-                    return
-
-                # Atomic swap
-                await queries.remove_champion(trade.initiator_id, trade.offered_champion_id, conn=conn)
-                await queries.own_champion(trade.target_id, trade.offered_champion_id, conn=conn)
-                await queries.remove_champion(trade.target_id, trade.requested_champion_id, conn=conn)
-                await queries.own_champion(trade.initiator_id, trade.requested_champion_id, conn=conn)
-                await queries.set_trade_status(trade_id, "accepted", conn=conn)
-
+        items = {"initiator": [], "target": []}
+        view = TradeView(trade.id, interaction.user.id, target.id)
+        embed = trade_session_embed(trade, interaction.user, target, items)
         await interaction.response.send_message(
-            embed=info_embed(f"Trade #{trade_id} accepted. Champions swapped.")
+            content=f"{target.mention} — {interaction.user.mention} wants to trade.",
+            embed=embed,
+            view=view,
         )
-
-    @app_commands.command(name="decline", description="Decline a pending trade by ID.")
-    @register_user
-    async def decline(self, interaction: discord.Interaction, trade_id: int) -> None:
-        trade = await queries.get_trade(trade_id)
-        if trade is None or trade.target_id != interaction.user.id:
-            await interaction.response.send_message(
-                embed=failure_embed("That trade isn't yours to decline."), ephemeral=True
-            )
-            return
-        if trade.status != "pending":
-            await interaction.response.send_message(
-                embed=failure_embed(f"Trade #{trade_id} is `{trade.status}`."), ephemeral=True
-            )
-            return
-
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await queries.set_trade_status(trade_id, "declined", conn=conn)
-                # Refund tax
-                await queries.add_gold(trade.initiator_id, TRADE_TAX_GOLD, conn=conn)
-        await interaction.response.send_message(
-            embed=info_embed(f"Trade #{trade_id} declined. Tax refunded to <@{trade.initiator_id}>.")
-        )
-
-    @app_commands.command(name="cancel", description="Cancel a trade you initiated.")
-    @register_user
-    async def cancel(self, interaction: discord.Interaction, trade_id: int) -> None:
-        trade = await queries.get_trade(trade_id)
-        if trade is None or trade.initiator_id != interaction.user.id:
-            await interaction.response.send_message(
-                embed=failure_embed("That trade isn't yours to cancel."), ephemeral=True
-            )
-            return
-        if trade.status != "pending":
-            await interaction.response.send_message(
-                embed=failure_embed(f"Trade #{trade_id} is `{trade.status}`."), ephemeral=True
-            )
-            return
-
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await queries.set_trade_status(trade_id, "cancelled", conn=conn)
-                await queries.add_gold(interaction.user.id, TRADE_TAX_GOLD, conn=conn)
-        await interaction.response.send_message(
-            embed=info_embed(f"Trade #{trade_id} cancelled. Tax refunded.")
-        )
-
-    @app_commands.command(name="trades", description="List your pending trades.")
-    @register_user
-    async def trades(self, interaction: discord.Interaction) -> None:
-        rows = await queries.list_pending_trades_for_user(interaction.user.id)
-        if not rows:
-            await interaction.response.send_message(
-                embed=info_embed("No pending trades."), ephemeral=True
-            )
-            return
-        lines = []
-        for t in rows:
-            offered = await queries.get_champion_by_id(t.offered_champion_id)
-            requested = await queries.get_champion_by_id(t.requested_champion_id)
-            direction = "→ you" if t.target_id == interaction.user.id else "← you initiated"
-            lines.append(
-                f"**#{t.id}** {direction}\n"
-                f"  Offer: {offered.name} ({TIER_NAME[offered.tier]})\n"
-                f"  Want:  {requested.name} ({TIER_NAME[requested.tier]})\n"
-                f"  Expires: <t:{int(t.expires_at.timestamp())}:R>"
-            )
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title="Pending trades",
-                description="\n\n".join(lines),
-                color=0x9C27B0,
-            ),
-            ephemeral=True,
-        )
-
-    @app_commands.command(name="trade-log", description="View recent trade history.")
-    @app_commands.describe(user="Optional — view someone else's history.")
-    @register_user
-    async def trade_log(
-        self, interaction: discord.Interaction, user: discord.Member | None = None
-    ) -> None:
-        target_id = user.id if user else interaction.user.id
-        rows = await queries.list_trade_log(target_id)
-        if not rows:
-            await interaction.response.send_message(
-                embed=info_embed("No trade history."), ephemeral=True
-            )
-            return
-        lines = []
-        for t in rows:
-            offered = await queries.get_champion_by_id(t.offered_champion_id)
-            requested = await queries.get_champion_by_id(t.requested_champion_id)
-            lines.append(
-                f"#{t.id} [{t.status}] {offered.name} ↔ {requested.name} "
-                f"(<t:{int(t.created_at.timestamp())}:R>)"
-            )
-        await interaction.response.send_message(
-            embed=discord.Embed(
-                title=f"Trade log — {user.display_name if user else 'you'}",
-                description="\n".join(lines),
-                color=0x9C27B0,
-            ),
-            ephemeral=True,
-        )
+        msg = await interaction.original_response()
+        await queries.set_trade_message(trade.id, msg.channel.id, msg.id)
 
 
 async def setup(bot: commands.Bot) -> None:

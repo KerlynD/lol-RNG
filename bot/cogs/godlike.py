@@ -31,7 +31,6 @@ from bot.utils.embeds import (
     action_result_embed,
     cooldown_embed,
     failure_embed,
-    info_embed,
     pull_embed,
 )
 
@@ -197,7 +196,8 @@ class Godlike(commands.Cog):
             )
             return
 
-        # Use a trade row for the consent flow — reuses the /accept infrastructure.
+        # Open an interactive trade session pre-populated with the two champs;
+        # both sides just need to hit Confirm.
         success = await _gate_action(interaction, "portal")
         if success is None:
             return
@@ -214,20 +214,26 @@ class Godlike(commands.Cog):
             )
             return
 
-        trade = await queries.create_trade(
+        from bot.cogs.trading import TRADE_TTL, TradeView, trade_session_embed
+
+        trade = await queries.create_trade_session(
             initiator_id=interaction.user.id,
             target_id=target.id,
-            offered_champion_id=offered.id,
-            requested_champion_id=requested.id,
-            ttl=timedelta(hours=1),
+            ttl=TRADE_TTL,
         )
-        await interaction.response.send_message(
-            content=target.mention,
-            embed=info_embed(
-                f"🌀 **Portal opened** — {target.display_name}, you have 1h to `/accept {trade.id}` "
-                f"to swap **{requested.name}** for **{offered.name}**."
-            ),
+        await queries.add_trade_item(trade.id, "initiator", offered.id)
+        await queries.add_trade_item(trade.id, "target", requested.id)
+        items = await queries.list_trade_items(trade.id)
+        view = TradeView(trade.id, interaction.user.id, target.id)
+        embed = trade_session_embed(trade, interaction.user, target, items)
+        embed.title = f"🌀 Portal — {embed.title.replace('🤝 Trade — ', '')}"
+        await interaction.followup.send(
+            content=f"{target.mention} — {interaction.user.mention} opened a Portal.",
+            embed=embed,
+            view=view,
         )
+        msg = await interaction.original_response()
+        await queries.set_trade_message(trade.id, msg.channel.id, msg.id)
 
     # ===== Death (T7) ========================================================
 

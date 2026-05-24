@@ -394,7 +394,7 @@ class Menu(commands.Cog):
         if trades:
             embed.add_field(
                 name=f"📦 Pending trades ({len(trades)})",
-                value="Use `/trades` to view, `/accept <id>` or `/decline <id>`.",
+                value="Open the trade message you were tagged in to confirm/cancel, or run `/trade @user` to start a new one.",
                 inline=False,
             )
 
