@@ -234,14 +234,19 @@ class PVE(commands.Cog):
         opponent_splash: str | None = None
         camp: CampSpec | None = None
         if rng.random() < wild_champ_chance(region.key):
-            cap = min(region.tier_max, MAX_CHAMPION_TIER)
+            # Any champion from the region can appear as a wild encounter —
+            # but they fight AT the region's tier, not their roster tier.
+            # Miss Fortune is roster-T2, but in Bilgewater she shows up
+            # as a T5–T6 threat (a Bilgewater legend on home turf).
             candidates = await queries.champions_in_regions(
-                list(region.champ_regions), region.tier_min, cap
+                list(region.champ_regions), 1, MAX_CHAMPION_TIER
             )
             if candidates:
-                weights = [region.tier_max - c.tier + 1 for c in candidates]
-                wild = rng.choices(candidates, weights=weights, k=1)[0]
-                camp = wild_champion_camp(wild)
+                wild = rng.choice(candidates)
+                lo = min(region.tier_min, MAX_CHAMPION_TIER)
+                hi = min(region.tier_max, MAX_CHAMPION_TIER)
+                wild_tier = rng.randint(lo, hi) if hi >= lo else lo
+                camp = wild_champion_camp(wild, tier=wild_tier)
                 opponent_splash = wild.splash_url
         if camp is None:
             camp = roll_region_encounter(region.key, rng=rng)

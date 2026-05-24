@@ -240,20 +240,24 @@ def roll_region_encounter(
     return rng.choices(specs, weights=weights, k=1)[0]
 
 
-def wild_champion_camp(champ: Champion) -> CampSpec:
+def wild_champion_camp(champ: Champion, *, tier: int | None = None) -> CampSpec:
     """Build a CampSpec for a wild champion encounter.
 
-    Champions hit harder than monsters of the same tier — the payout reflects
-    that, and a same-tier fragment can drop.
+    `tier` overrides the champion's roster tier — wild encounters scale to
+    the *region* you find them in (Miss Fortune is roster-T2, but in
+    Bilgewater she fights as a T5–T6 threat). Champions also hit harder
+    than monsters of the same tier — the payout reflects that, and a
+    same-tier fragment can drop.
     """
-    frag_tier = min(champ.tier, 6)
+    actual_tier = tier if tier is not None else champ.tier
+    frag_tier = min(actual_tier, 6)
     return CampSpec(
         key=f"wild:{champ.id}",
         name=champ.name,
-        tier=champ.tier,
+        tier=actual_tier,
         cooldown_range=(60, 160),
-        base_gold=champ.tier * 150,
-        base_xp=champ.tier * 24,
+        base_gold=actual_tier * 150,
+        base_xp=actual_tier * 24,
         weak_to=None,
         drops=(("mat", 0.5), (f"fragment_t{frag_tier}", 0.15)),
         flavor=f"You round a bend and come face to face with **{champ.name}**!",
