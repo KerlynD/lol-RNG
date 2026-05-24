@@ -141,9 +141,14 @@ def roll_encounter(rng: random.Random | None = None) -> CampSpec:
     return CAMPS[key]
 
 
+# Global hunt cooldown — fast-paced, regardless of camp tier. Per-camp
+# `cooldown_range` is preserved on the dataclass for reference but no longer
+# drives the wait; over-a-minute waits made the loop feel sluggish.
+HUNT_COOLDOWN_MIN_SEC = 10
+HUNT_COOLDOWN_MAX_SEC = 30
+
+
 def cooldown_seconds(camp: CampSpec, rng: random.Random | None = None) -> int:
+    """Random 10-30s cooldown after every /hunt-camp interaction."""
     rng = rng or random
-    low, high = camp.cooldown_range
-    if low >= high:
-        return low
-    return rng.randint(low, high)
+    return rng.randint(HUNT_COOLDOWN_MIN_SEC, HUNT_COOLDOWN_MAX_SEC)
