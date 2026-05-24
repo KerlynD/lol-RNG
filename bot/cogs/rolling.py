@@ -15,6 +15,7 @@ from bot.db.queries import Champion
 from bot.game.economy import (
     FRAGMENT_THRESHOLDS,
     ROLL_COSTS,
+    available_redeem_options,
     fragment_item_key,
 )
 from bot.game.rolling import (
@@ -263,6 +264,132 @@ _TIER_COLORS = {
 }
 
 
+def _redeem_panel_embed(
+    inventory: dict[str, int],
+    options: list[tuple[int, int, int]],
+    cap: int,
+) -> discord.Embed:
+    """Ephemeral panel listing every redemption the user can afford."""
+    held_lines: list[str] = []
+    for tier in sorted(FRAGMENT_THRESHOLDS, reverse=True):
+        qty = inventory.get(fragment_item_key(tier), 0)
+        if qty > 0:
+            held_lines.append(f"  {TIER_NAME[tier]} (T{tier}): **{qty}**")
+    held_text = "\n".join(held_lines) or "_no fragments_"
+
+    desc = (
+        "**Your fragments:**\n"
+        f"{held_text}\n\n"
+        "**Conversion:** same-tier = ×1, **+1 tier = ×2 fragments**, "
+        "**+2 tiers = ×3 fragments**. T7 (Death) has no fragment path."
+    )
+    if cap < 6:
+        desc += f"\n\n_Region cap: {TIER_NAME[cap]} (T{cap})._"
+
+    embed = discord.Embed(
+        title="🧩 Redeem Fragment",
+        description=desc,
+        color=0x9C27B0,
+    )
+    return embed
+
+
+class RedeemSelect(discord.ui.Select):
+    def __init__(self, options: list[tuple[int, int, int]]):
+        select_options: list[discord.SelectOption] = []
+        for source, target, cost in options[:25]:
+            step = target - source
+            mult = "" if step == 0 else f" (+{step} tier{'s' if step > 1 else ''}, ×{step + 1})"
+            label = f"{cost}× {TIER_NAME[source]} → 1 {TIER_NAME[target]} pull"
+            select_options.append(discord.SelectOption(
+                label=label[:100],
+                value=f"{source}:{target}:{cost}",
+                description=f"Spend {cost} T{source} fragments{mult}"[:100],
+            ))
+        super().__init__(
+            placeholder="Pick a redemption…",
+            options=select_options, min_values=1, max_values=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        source_str, target_str, cost_str = self.values[0].split(":")
+        source_tier, target_tier, cost = int(source_str), int(target_str), int(cost_str)
+        await _execute_redeem(interaction, source_tier, target_tier, cost)
+
+
+class RedeemView(discord.ui.View):
+    def __init__(self, owner_id: int, options: list[tuple[int, int, int]]):
+        super().__init__(timeout=180.0)
+        self.owner_id = owner_id
+        self.add_item(RedeemSelect(options))
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.owner_id:
+            await interaction.response.send_message(
+                "This isn't your redemption panel.", ephemeral=True
+            )
+            return False
+        return True
+
+
+async def _execute_redeem(
+    interaction: discord.Interaction,
+    source_tier: int,
+    target_tier: int,
+    cost: int,
+) -> None:
+    user_id = interaction.user.id
+    user = await queries.get_user(user_id)
+    cap = roll_tier_cap(user.current_region if user else None)
+    if target_tier > cap:
+        await interaction.response.edit_message(
+            embed=failure_embed(
+                f"This region only lets you redeem up to **{TIER_NAME[cap]}**."
+            ),
+            view=None,
+        )
+        return
+
+    candidates = await queries.list_champions_by_tier(target_tier)
+    if not candidates:
+        await interaction.response.edit_message(
+            embed=failure_embed("No champions seeded at that tier — contact admin."),
+            view=None,
+        )
+        return
+
+    pool = get_pool()
+    item = fragment_item_key(source_tier)
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            ok = await queries.consume_item(user_id, item, cost, conn=conn)
+            if not ok:
+                await interaction.response.edit_message(
+                    embed=failure_embed("Fragment balance changed mid-redeem. Try again."),
+                    view=None,
+                )
+                return
+
+    picked = pick_champion_in_tier(candidates, rng=random.Random())
+    final, was_dupe, frag_qty, reap_to = await _resolve_pull(user_id, picked)
+    if reap_to is not None:
+        await interaction.response.edit_message(
+            embed=info_embed(
+                f"You redeemed **{final.name}** — but Lamb walked beside you. "
+                f"<@{reap_to}> reaped your pull."
+            ),
+            view=None,
+        )
+        return
+    embed = pull_embed(final, was_dupe=was_dupe, fragment_qty=frag_qty)
+    step = target_tier - source_tier
+    footer = f"Spent {cost} {TIER_NAME[source_tier]} fragments"
+    if step:
+        footer += f" · upgraded {step} tier{'s' if step > 1 else ''}"
+    embed.set_footer(text=footer)
+    await interaction.response.edit_message(embed=embed, view=None)
+
+
 class Rolling(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -289,79 +416,38 @@ class Rolling(commands.Cog):
 
     @app_commands.command(
         name="redeem-fragment",
-        description="Spend fragments for a guaranteed pull at that tier.",
+        description="Spend fragments for a guaranteed pull — pick from your available options.",
     )
-    @app_commands.describe(tier="Tier 1–6 (no fragment path for Tier 7 Death).")
     @register_user
-    async def redeem_fragment(self, interaction: discord.Interaction, tier: int) -> None:
-        if tier not in FRAGMENT_THRESHOLDS:
-            await interaction.response.send_message(
-                embed=failure_embed("Tier must be between 1 and 6."), ephemeral=True
-            )
-            return
-
-        # Region roll cap also applies to fragment redemption.
+    async def redeem_fragment(self, interaction: discord.Interaction) -> None:
         user = await queries.get_user(interaction.user.id)
         cap = roll_tier_cap(user.current_region if user else None)
-        if tier > cap:
+        inventory = await queries.get_inventory(interaction.user.id)
+
+        options = available_redeem_options(inventory, region_tier_cap=cap)
+        if not options:
             region = get_region(user.current_region if user else None)
-            where = region.display if region else "this region"
+            cap_text = (
+                f"Your region ({region.display}) caps redemption at "
+                f"**{TIER_NAME[cap]}**." if region and cap < 6 else ""
+            )
             await interaction.response.send_message(
                 embed=failure_embed(
-                    f"You can only redeem up to **{TIER_NAME[cap]}** fragments in "
-                    f"**{where}**. Travel onward to redeem Tier {tier}."
+                    "You don't have enough fragments to redeem anything yet.\n\n"
+                    "Need at least the threshold of a tier (e.g. "
+                    f"{FRAGMENT_THRESHOLDS[1]} × T1 for a T1 pull).\n"
+                    "Double the fragments to redeem one tier up, triple for two "
+                    f"tiers up. {cap_text}"
                 ),
                 ephemeral=True,
             )
             return
 
-        threshold = FRAGMENT_THRESHOLDS[tier]
-        item = fragment_item_key(tier)
-        held = await queries.get_item_qty(interaction.user.id, item)
-        if held < threshold:
-            await interaction.response.send_message(
-                embed=failure_embed(
-                    f"Need {threshold} Tier {tier} fragments to redeem. You have {held}."
-                ),
-                ephemeral=True,
-            )
-            return
-
-        # Spend, then guarantee a pick from that tier.
-        pool = get_pool()
-        candidates = await queries.list_champions_by_tier(tier)
-        if not candidates:
-            await interaction.response.send_message(
-                embed=failure_embed("No champions seeded at that tier — contact admin."),
-                ephemeral=True,
-            )
-            return
-
-        rng = random.Random()
-        picked = pick_champion_in_tier(candidates, rng=rng)
-
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                ok = await queries.consume_item(interaction.user.id, item, threshold, conn=conn)
-                if not ok:
-                    await interaction.response.send_message(
-                        embed=failure_embed("Fragment balance changed mid-redeem. Try again."),
-                        ephemeral=True,
-                    )
-                    return
-
-        final, was_dupe, frag_qty, reap_to = await _resolve_pull(interaction.user.id, picked)
-        if reap_to is not None:
-            await interaction.response.send_message(
-                embed=info_embed(
-                    f"You redeemed **{final.name}** — but Lamb walked beside you. "
-                    f"<@{reap_to}> reaped your pull."
-                )
-            )
-            return
-        embed = pull_embed(final, was_dupe=was_dupe, fragment_qty=frag_qty)
-        embed.set_footer(text=f"Spent {threshold} Tier {tier} fragments")
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(
+            embed=_redeem_panel_embed(inventory, options, cap),
+            view=RedeemView(interaction.user.id, options),
+            ephemeral=True,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

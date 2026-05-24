@@ -31,6 +31,52 @@ def fragment_item_key(tier: int) -> str:
     return f"fragment_t{tier}"
 
 
+# Cross-tier fragment conversion (v3):
+#   same tier:   cost = threshold[N]      (×1)
+#   +1 tier up:  cost = threshold[N] × 2  (double for one tier up)
+#   +2 tier up:  cost = threshold[N] × 3  (triple for two tiers up)
+# Tier 7 (Death) has no fragment path. Region roll cap still applies.
+MAX_FRAGMENT_REDEEM_TIER = 6
+MAX_UPGRADE_STEPS = 2
+
+
+def redeem_cost(source_tier: int, target_tier: int) -> int | None:
+    """Fragments of `source_tier` needed to redeem a `target_tier` pull, or
+    None if the combination isn't valid (wrong direction, too many steps,
+    or beyond the T6 fragment ceiling)."""
+    if source_tier not in FRAGMENT_THRESHOLDS:
+        return None
+    if target_tier > MAX_FRAGMENT_REDEEM_TIER:
+        return None
+    step = target_tier - source_tier
+    if step < 0 or step > MAX_UPGRADE_STEPS:
+        return None
+    return FRAGMENT_THRESHOLDS[source_tier] * (step + 1)
+
+
+def available_redeem_options(
+    inventory: dict[str, int], region_tier_cap: int
+) -> list[tuple[int, int, int]]:
+    """Every redemption the user can afford right now, given their inventory
+    and the region roll cap. Each tuple is (source_tier, target_tier, cost),
+    sorted by target tier descending so the strongest pulls surface first."""
+    cap = min(region_tier_cap, MAX_FRAGMENT_REDEEM_TIER)
+    out: list[tuple[int, int, int]] = []
+    for source in FRAGMENT_THRESHOLDS:
+        held = inventory.get(fragment_item_key(source), 0)
+        if held <= 0:
+            continue
+        for step in range(MAX_UPGRADE_STEPS + 1):
+            target = source + step
+            if target > cap:
+                break
+            cost = redeem_cost(source, target)
+            if cost is not None and held >= cost:
+                out.append((source, target, cost))
+    out.sort(key=lambda row: (-row[1], row[0], row[2]))
+    return out
+
+
 # --- Trading -----------------------------------------------------------------
 TRADE_TAX_GOLD = 500
 
