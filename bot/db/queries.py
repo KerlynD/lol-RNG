@@ -656,7 +656,7 @@ async def set_ambient_opt_in(discord_id: int, opt_in: bool) -> None:
 async def list_opted_in_active_users(
     *, active_days: int = 7, ambient_cooldown_min: int = 20
 ) -> list[int]:
-    """Users opted in, with recent activity, and no pending event AND no event in last 20 min."""
+    """Users opted in, with recent activity, no pending event, and no event in the last `ambient_cooldown_min` minutes."""
     rows = await get_pool().fetch(
         """
         SELECT u.discord_id FROM users u
