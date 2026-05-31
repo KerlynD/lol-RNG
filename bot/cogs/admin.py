@@ -65,6 +65,31 @@ class Admin(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.command(
+        name="spawns",
+        description="Toggle automatic ambushes & world bosses on/off (admin only).",
+    )
+    @app_commands.describe(
+        enabled="True to allow spawns, False to pause them (e.g. while you sleep)."
+    )
+    async def spawns(self, interaction: discord.Interaction, enabled: bool) -> None:
+        perms = getattr(interaction.user, "guild_permissions", None)
+        if perms is None or not perms.administrator:
+            await interaction.response.send_message(
+                "This command is for server administrators only.", ephemeral=True
+            )
+            return
+
+        await queries.set_config("spawns_paused", "0" if enabled else "1")
+        if enabled:
+            msg = "🟢 Automatic ambient events & world bosses are now **ON**."
+        else:
+            msg = (
+                "🔴 Automatic ambient events & world bosses are now **paused**. "
+                "Nothing new will spawn until you run `/spawns enabled: True`. Sleep well. 😴"
+            )
+        await interaction.response.send_message(msg, ephemeral=True)
+
     @app_commands.command(name="dbcheck", description="Verify DB connectivity and champion seed.")
     async def dbcheck(self, interaction: discord.Interaction) -> None:
         try:

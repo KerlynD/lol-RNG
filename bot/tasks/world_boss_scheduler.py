@@ -64,6 +64,10 @@ async def sweep_and_maybe_spawn() -> None:
                     )
                 )
 
+        # Owner can pause all surprise spawns (e.g. overnight) via /spawns.
+        if await queries.get_config("spawns_paused") == "1":
+            return
+
         # 2. Maybe spawn
         active = await queries.get_active_world_boss()
         if active:
