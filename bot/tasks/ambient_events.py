@@ -51,6 +51,10 @@ async def spawn_ambient_events() -> None:
         if not channel_id_str:
             return
 
+        # Owner can pause all surprise spawns (e.g. overnight) via /spawns.
+        if await queries.get_config("spawns_paused") == "1":
+            return
+
         # Coin-flip per tick — keeps the rhythm from feeling mechanical.
         if random.random() >= SPAWN_CHANCE_PER_TICK:
             return
